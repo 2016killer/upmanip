@@ -64,19 +64,23 @@ UPManip.IsMatrixSingularFast = function(mat)
 	or right:LengthSqr() < zero
 end
 
-
 UPManip.__internal_FLAG_MSG = {}
 UPManip.__internal_ADD_FLAG_MSG = function(self, msg, flag)
-    local targetFlag = flag or 0
+    local targetFlag = flag or 1
     local originalFlag = targetFlag
 
-    while self.__internal_FLAG_MSG[targetFlag] do
-        targetFlag = bit.lshift(targetFlag, 1)
+	local succ = false
+	for i = 0, 31 do
+		if not self.__internal_FLAG_MSG[targetFlag] then
+			succ = true
+			break
+		end
+		targetFlag = bit.lshift(targetFlag, 1)
+	end
 
-        if targetFlag > 0xFFFFFFFFFFFFFFFF then
-            error('溢出了, 自己改:' .. msg)
-        end
-    end
+	if not succ then
+		error('所有标志位都被占用了, 自己改:' .. msg)
+	end
 
     self.__internal_FLAG_MSG[targetFlag] = msg
     return targetFlag
@@ -162,7 +166,8 @@ local ERR_FLAG_NO_FINAL_PARENT_MATRIX = UPManip:__internal_ADD_FLAG_MSG('can not
 local ERR_FLAG_FINAL_PARENT_SINGULAR = UPManip:__internal_ADD_FLAG_MSG('final parent Matrix is singular')
 
 
-local STACK_FLAG_LERP = UPManip:__internal_ADD_FLAG_MSG('call lerp')
+local STACK_FLAG_LERP_WORLD = UPManip:__internal_ADD_FLAG_MSG('call lerp world')
+local STACK_FLAG_LERP_LOCAL = UPManip:__internal_ADD_FLAG_MSG('call lerp local')
 local STACK_FLAG_SET_POSITION = UPManip:__internal_ADD_FLAG_MSG('call set position')
 local STACK_FLAG_SET_POS = UPManip:__internal_ADD_FLAG_MSG('call set position')
 local STACK_FLAG_SET_ANG = UPManip:__internal_ADD_FLAG_MSG('call set angle')
@@ -336,6 +341,37 @@ end
 -- ================================== 数据层 ===========================
 -- 快照同样拥有这些方法, 但是代理器对快照无效, 具体看开头的注释
 -- ================================== 数据层 ===========================
+-- 这些标志位将说明获取矩阵的场景
+local INIT = 0x01
+local FINAL = 0x02
+local LERP_WORLD = 0x04
+local LERP_LOCAL = 0x08
+local SNAPSHOT = 0x10
+local CUR = 0x20
+local INIT_LERP_WORLD = bit.bor(INIT, LERP_WORLD)
+local FINAL_LERP_WORLD = bit.bor(FINAL, LERP_WORLD)
+local INIT_LERP_LOCAL = bit.bor(INIT, LERP_LOCAL)
+local FINAL_LERP_LOCAL = bit.bor(FINAL, LERP_LOCAL)
+// local CUR_LERP_WORLD = bit.bor(CUR, LERP_WORLD)
+local CUR_LERP_LOCAL = bit.bor(CUR, LERP_LOCAL)
+
+UPManip.GET_MATRIX_FLAG = {
+	INIT = INIT,
+	FINAL = FINAL,
+	CUR = CUR,
+	LERP_WORLD = LERP_WORLD,
+	LERP_LOCAL = LERP_LOCAL,
+	INIT_LERP_WORLD = INIT_LERP_WORLD,
+	FINAL_LERP_WORLD = FINAL_LERP_WORLD,
+	INIT_LERP_LOCAL = INIT_LERP_LOCAL,
+	FINAL_LERP_LOCAL = FINAL_LERP_LOCAL,
+
+	// CUR_LERP_WORLD = CUR_LERP_WORLD, -- 没有这个场景
+	CUR_LERP_LOCAL = CUR_LERP_LOCAL,
+	-- 快照
+	SNAPSHOT = SNAPSHOT,
+}
+
 
 function ENTITY:UPMaGetBoneMatrix(boneName, proxy, mode)
 	if proxy then
@@ -361,14 +397,14 @@ end
 
 function ENTITY:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy1, proxy2)
 	-- 实际上 ent1、ent2 的类型不一定要是实体, 也可以是 UPSnapshot
-	-- 一般在帧循环中调用, 所以不作验证
+	-- 一般在 UPMaLerpBoneWorldBatch 中调用, 所以不作验证
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
-	local initMatrix = ent1:UPMaGetBoneMatrix(boneName, proxy1)
+	local initMatrix = ent1:UPMaGetBoneMatrix(boneName, proxy1, INIT_LERP_WORLD)
 	if not initMatrix then return nil, bit.bor(ERR_FLAG_NO_INIT_MATRIX, STACK_FLAG_LERP_WORLD) end
 
-	local finalMatrix = ent2:UPMaGetBoneMatrix(boneName, proxy2)
+	local finalMatrix = ent2:UPMaGetBoneMatrix(boneName, proxy2, FINAL_LERP_WORLD)
 	if not finalMatrix then return nil, bit.bor(ERR_FLAG_NO_FINAL_MATRIX, STACK_FLAG_LERP_WORLD) end
 
 	local result = Matrix()
@@ -381,21 +417,21 @@ end
 
 function ENTITY:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy1, proxy2, proxySelf)
 	-- 实际上 ent1、ent2 的类型不一定要是实体, 也可以是 UPSnapshot
-	-- 一般在帧循环中调用, 所以不作验证
+	-- 一般在 UPMaLerpBoneLocalBatch 中调用, 所以不作验证
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
 	-- 注意, 这里用的是代理父级和 UPMaGetBonexxx 系列不同, 看log的栈来辨别
-	local curParentMatrix = self:UPMaGetBoneMatrix(boneName, proxySelf)
+	local curParentMatrix = self:UPMaGetParentMatrix(boneName, proxySelf, CUR_LERP_LOCAL)
 	if not curParentMatrix then return nil, bit.bor(ERR_FLAG_NO_PARENT, STACK_FLAG_LERP_LOCAL) end
 
 	-- 对于快照可以使用缓存
-	local initMatrixLocal = ent1.GetBoneMatrixLocal and ent1:GetBoneMatrixLocal(boneName, proxy1) or nil
+	local initMatrixLocal = ent1.GetBoneMatrixLocal and ent1:GetBoneMatrixLocal(boneName) or nil
 	if not initMatrixLocal then
-		local initMatrix = ent1:UPMaGetBoneMatrix(boneName, proxy1)
+		local initMatrix = ent1:UPMaGetBoneMatrix(boneName, proxy1, INIT_LERP_LOCAL)
 		if not initMatrix then return nil, bit.bor(ERR_FLAG_NO_INIT_MATRIX, STACK_FLAG_LERP_LOCAL) end
 
-		local initParentMatrixInvert = ent1:UPMaGetParentMatrix(boneName, proxy1)
+		local initParentMatrixInvert = ent1:UPMaGetParentMatrix(boneName, proxy1, INIT_LERP_LOCAL)
 		if not initParentMatrixInvert then return nil, bit.bor(ERR_FLAG_NO_INIT_PARENT_MATRIX, STACK_FLAG_LERP_LOCAL) end
 		local notSingular = initParentMatrixInvert:Invert()
 		if not notSingular then return nil, bit.bor(ERR_FLAG_INIT_PARENT_SINGULAR, STACK_FLAG_LERP_LOCAL) end
@@ -403,12 +439,12 @@ function ENTITY:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy1, proxy2, proxy
 		initMatrixLocal = initParentMatrixInvert * initMatrix
 	end
 	
-	local finalMatrixLocal = ent2.GetBoneMatrixLocal and ent2:GetBoneMatrixLocal(boneName, proxy2) or nil
+	local finalMatrixLocal = ent2.GetBoneMatrixLocal and ent2:GetBoneMatrixLocal(boneName) or nil
 	if not finalMatrixLocal then
-		local finalMatrix = ent2:UPMaGetBoneMatrix(boneName, proxy2)
+		local finalMatrix = ent2:UPMaGetBoneMatrix(boneName, proxy2, FINAL_LERP_LOCAL)
 		if not finalMatrix then return nil, bit.bor(ERR_FLAG_NO_FINAL_MATRIX, STACK_FLAG_LERP_LOCAL) end
 
-		local finalParentMatrixInvert = ent2:UPMaGetParentMatrix(boneName, proxy2)
+		local finalParentMatrixInvert = ent2:UPMaGetParentMatrix(boneName, proxy2, FINAL_LERP_LOCAL)
 		if not finalParentMatrixInvert then return nil, bit.bor(ERR_FLAG_NO_FINAL_PARENT_MATRIX, STACK_FLAG_LERP_LOCAL) end
 		local notSingular = finalParentMatrixInvert:Invert()
 		if not notSingular then return nil, bit.bor(ERR_FLAG_FINAL_PARENT_SINGULAR, STACK_FLAG_LERP_LOCAL) end
@@ -426,16 +462,18 @@ function ENTITY:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy1, proxy2, proxy
 	return result, SUCC_FLAG
 end
 
-function ENTITY:UPMaLerpBoneWorldBatch(t, boneList, ent1, ent2, proxy, proxy2)
-	-- 一般在帧循环中调用, 所以不作验证
+function ENTITY:UPMaLerpBoneWorldBatch(boneList, t, ent1, ent2, proxy, proxy2)
+	-- 一般在帧循环中调用, 所以不作太多验证
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
+	assert(isnumber(t), 't must be a number')
+	assert(istable(boneList), 'boneList must be a table')
 
 	local resultBatch = {}
 	local flags = {}
 
 	for _, boneName in ipairs(boneList) do
-		local result, flag = self:UPMaLerpBoneWorld(t, boneName, ent1, ent2, proxy, proxy2)
+		local result, flag = self:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy, proxy2)
 		resultBatch[boneName] = result
 		flags[boneName] = flag
 	end
@@ -443,16 +481,18 @@ function ENTITY:UPMaLerpBoneWorldBatch(t, boneList, ent1, ent2, proxy, proxy2)
 	return resultBatch, flags
 end
 
-function ENTITY:UPMaLerpBoneLocalBatch(t, boneList, ent1, ent2, proxy, proxy2, proxySelf)
-	-- 一般在帧循环中调用, 所以不作验证
+function ENTITY:UPMaLerpBoneLocalBatch(boneList, t, ent1, ent2, proxy, proxy2, proxySelf)
+	-- 一般在帧循环中调用, 所以不作太多验证
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
+	assert(isnumber(t), 't must be a number')
+	assert(istable(boneList), 'boneList must be a table')
 
 	local resultBatch = {}
 	local flags = {}
 
 	for _, boneName in ipairs(boneList) do
-		local result, flag = self:UPMaLerpBoneLocal(t, boneName, ent1, ent2, proxy, proxy2, proxySelf)
+		local result, flag = self:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy, proxy2, proxySelf)
 		resultBatch[boneName] = result
 		flags[boneName] = flag
 	end
@@ -504,11 +544,11 @@ function UPSnapshot:New(ent, boneList, proxy, withLocal)
 
 	for _, boneName in ipairs(boneList) do
 		assert(isstring(boneName), 'expect boneName to be a string')
-		self.MatTbl[boneName] = ent:UPMaGetBoneMatrix(boneName, proxy, 'snapshot')
+		self.MatTbl[boneName] = ent:UPMaGetBoneMatrix(boneName, proxy, SNAPSHOT)
 		if not withLocal then continue end
 
 		-- 这里直接缓存, 把错误推到奇异去处理
-		local curParentMatrix = ent:UPMaGetParentMatrix(boneName, proxy, 'snapshot')
+		local curParentMatrix = ent:UPMaGetParentMatrix(boneName, proxy, SNAPSHOT)
 		self.MatParentTbl[boneName] = curParentMatrix
 		if not curParentMatrix then continue end
 
@@ -561,8 +601,9 @@ end
 -- 这里把根骨骼扩张到实体本身
 -- ================================== 默认代理器 ===========================
 UPManip.DefaultPlayerProxy = {}
+UPManip.DefaultPlayerProxy.Name = '默认玩家骨骼代理'
 
-function DefaultPlayerProxy:SetPosition(ent, boneName, posw, angw)
+function UPManip.DefaultPlayerProxy:SetPosition(ent, boneName, posw, angw)
 	if boneName == 'SELF' then
 		self:SetPos(posw)
 		self:SetAngles(angw)
@@ -572,7 +613,7 @@ function DefaultPlayerProxy:SetPosition(ent, boneName, posw, angw)
 	end
 end
 
-function DefaultPlayerProxy:SetPos(ent, boneName, posw)
+function UPManip.DefaultPlayerProxy:SetPos(ent, boneName, posw)
 	if boneName == 'SELF' then
 		self:SetPos(posw)
 		return SUCC_FLAG
@@ -581,7 +622,7 @@ function DefaultPlayerProxy:SetPos(ent, boneName, posw)
 	end
 end
 
-function DefaultPlayerProxy:SetAng(ent, boneName, angw)
+function UPManip.DefaultPlayerProxy:SetAng(ent, boneName, angw)
 	if boneName == 'SELF' then
 		self:SetAngles(angw)
 		return SUCC_FLAG
@@ -590,7 +631,7 @@ function DefaultPlayerProxy:SetAng(ent, boneName, angw)
 	end
 end
 
-function DefaultPlayerProxy:GetMatrix(ent, boneName, mode)
+function UPManip.DefaultPlayerProxy:GetMatrix(ent, boneName, mode)
 	if boneName == 'SELF' then
 		return ent:GetWorldTransformMatrix()
 	else
@@ -598,7 +639,7 @@ function DefaultPlayerProxy:GetMatrix(ent, boneName, mode)
 	end
 end
 
-function DefaultPlayerProxy:GetParentMatrix(ent, boneName, mode)
+function UPManip.DefaultPlayerProxy:GetParentMatrix(ent, boneName, mode)
 	if boneName == 'SELF' then
 		return nil
 	else
@@ -638,13 +679,10 @@ concommand.Add('upmanip_test_world', function(ply)
 		mossman:SetupBones()
 
 		local resultBatch, runtimeflags = mossman:UPMaLerpBoneWorldBatch(
+			boneList,
 			0.1, 
-			boneList, 
 			mossman, 
-			mossman2,
-			proxy,
-			proxy
-		)
+			mossman2)
 		mossman:UPMaPrintLog(runtimeflags)
 
 		local runtimeflag = mossman:UPManipBoneBatch(
