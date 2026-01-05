@@ -145,7 +145,7 @@ local ENTITY = FindMetaTable('Entity')
 -- ================================== 操纵层 ===========================
 -- 我要说明一点, 快照同样拥有这些方法, 但是会报错, 因为快照是只读的
 -- ================================== 操纵层 ===========================
-local SUCC_FLAG = UPManip:__internal_ADD_FLAG_MSG('success')
+local SUCC_FLAG = UPManip:__internal_ADD_FLAG_MSG('')
 local ERR_FLAG_BONEID = UPManip:__internal_ADD_FLAG_MSG('can not find bone id')
 local ERR_FLAG_NO_MATRIX = UPManip:__internal_ADD_FLAG_MSG('can not find Matrix')
 local ERR_FLAG_MATRIX_SINGULAR = UPManip:__internal_ADD_FLAG_MSG('Matrix is singular')
@@ -322,15 +322,15 @@ function ENTITY:UPManipBoneBatch(resultBatch, boneList, manipflag, proxy)
 		local newScale = data:GetScale()
 
 		if bit.band(manipflag, MANIP_POSITION) == MANIP_POSITION then
-			runtimeflag = bit.bor(runtimeflag, self:UPMaSetBonePosition(boneName, newPos, newAng))
+			runtimeflag = bit.bor(runtimeflag, self:UPMaSetBonePosition(boneName, newPos, newAng, proxy))
 		elseif bit.band(manipflag, MANIP_POS) == MANIP_POS then
-			runtimeflag = bit.bor(runtimeflag, self:UPMaSetBonePos(boneName, newPos))
+			runtimeflag = bit.bor(runtimeflag, self:UPMaSetBonePos(boneName, newPos, proxy))
 		elseif bit.band(manipflag, MANIP_ANG) == MANIP_ANG then
-			runtimeflag = bit.bor(runtimeflag, self:UPMaSetBoneAng(boneName, newAng))
+			runtimeflag = bit.bor(runtimeflag, self:UPMaSetBoneAng(boneName, newAng, proxy))
 		end
 
 		if bit.band(manipflag, MANIP_SCALE) == MANIP_SCALE then
-			runtimeflag = bit.bor(runtimeflag, self:UPMaSetBoneScale(boneName, newScale))
+			runtimeflag = bit.bor(runtimeflag, self:UPMaSetBoneScale(boneName, newScale, proxy))
 		end
 
 		runtimeflags[boneName] = runtimeflag
@@ -462,10 +462,13 @@ function ENTITY:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy1, proxy2, proxy
 	return result, SUCC_FLAG
 end
 
-function ENTITY:UPMaLerpBoneWorldBatch(boneList, t, ent1, ent2, proxy, proxy2)
+function ENTITY:UPMaLerpBoneWorldBatch(boneList, t, ent1, ent2, proxy1, proxy2)
 	-- 一般在帧循环中调用, 所以不作太多验证
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
+
+	assert(istable(proxy1) or proxy1 == nil, 'proxy1 must be a table or nil')
+	assert(istable(proxy2) or proxy2 == nil, 'proxy2 must be a table or nil')
 	assert(isnumber(t), 't must be a number')
 	assert(istable(boneList), 'boneList must be a table')
 
@@ -473,7 +476,7 @@ function ENTITY:UPMaLerpBoneWorldBatch(boneList, t, ent1, ent2, proxy, proxy2)
 	local flags = {}
 
 	for _, boneName in ipairs(boneList) do
-		local result, flag = self:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy, proxy2)
+		local result, flag = self:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy1, proxy2)
 		resultBatch[boneName] = result
 		flags[boneName] = flag
 	end
@@ -481,10 +484,14 @@ function ENTITY:UPMaLerpBoneWorldBatch(boneList, t, ent1, ent2, proxy, proxy2)
 	return resultBatch, flags
 end
 
-function ENTITY:UPMaLerpBoneLocalBatch(boneList, t, ent1, ent2, proxy, proxy2, proxySelf)
+function ENTITY:UPMaLerpBoneLocalBatch(boneList, t, ent1, ent2, proxy1, proxy2, proxySelf)
 	-- 一般在帧循环中调用, 所以不作太多验证
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
+
+	assert(istable(proxy1) or proxy1 == nil, 'proxy1 must be a table or nil')
+	assert(istable(proxy2) or proxy2 == nil, 'proxy2 must be a table or nil')
+	assert(istable(proxySelf) or proxySelf == nil, 'proxySelf must be a table or nil')
 	assert(isnumber(t), 't must be a number')
 	assert(istable(boneList), 'boneList must be a table')
 
@@ -492,12 +499,24 @@ function ENTITY:UPMaLerpBoneLocalBatch(boneList, t, ent1, ent2, proxy, proxy2, p
 	local flags = {}
 
 	for _, boneName in ipairs(boneList) do
-		local result, flag = self:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy, proxy2, proxySelf)
+		local result, flag = self:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy1, proxy2, proxySelf)
+		
+
 		resultBatch[boneName] = result
 		flags[boneName] = flag
 	end
 
 	return resultBatch, flags
+end
+
+function ENTITY:UPMaLerpBoneWorldBatchEasy(boneList, t, ent1, ent2, proxy)
+	-- 使用同一个代理器
+	return self:UPMaLerpBoneWorldBatch(boneList, t, ent1, ent2, proxy, proxy)
+end
+
+function ENTITY:UPMaLerpBoneLocalBatchEasy(boneList, t, ent1, ent2, proxy)
+	-- 使用同一个代理器
+	return self:UPMaLerpBoneLocalBatch(boneList, t, ent1, ent2, proxy, proxy, proxy)
 end
 
 
@@ -513,7 +532,9 @@ function ENTITY:UPMaPrintLog(runtimeflag, boneName, depth)
 	elseif isnumber(runtimeflag) then
 		local totalmsg = {}
 		for flag, msg in pairs(UPManip.__internal_FLAG_MSG) do
-			if bit.band(runtimeflag, flag) == flag then table.insert(totalmsg, msg) end
+			if msg ~= '' and bit.band(runtimeflag, flag) == flag then 
+				table.insert(totalmsg, msg) 
+			end
 		end
 		if #totalmsg == 0 then return end
 		print('============UPManip Log===========')
@@ -530,8 +551,13 @@ end
 
 UPSnapshot = {}
 UPSnapshot.__index = UPSnapshot
+UPSnapshot.DebugBoxMins = Vector(-1, -1, -1)
+UPSnapshot.DebugBoxMaxs = Vector(1, 1, 1)
+UPSnapshot.DebugBoxLifeTime = 5
+UPSnapshot.DebugBoxColorLocal = Color(255, 0, 0)
+UPSnapshot.DebugBoxColorWorld = Color(0, 255, 0)
 
-function UPSnapshot:New(ent, boneList, proxy, withLocal)
+function UPSnapshot:New(ent, boneList, proxy, withLocal, drawDebug)
 	-- 需要在外部调用 ent:SetupBones()
 	assert(isbool(withLocal), 'expect withLocal to be a boolean')
 	assert(istable(boneList), 'expect boneList to be a table')
@@ -540,7 +566,7 @@ function UPSnapshot:New(ent, boneList, proxy, withLocal)
     local self = setmetatable({}, UPSnapshot)
     self.MatTbl = {}
 	self.MatTblLocal = withLocal and {} or nil
-	self.MatParentTbl = {}
+	self.MatParentTbl = withLocal and {} or nil
 
 	for _, boneName in ipairs(boneList) do
 		assert(isstring(boneName), 'expect boneName to be a string')
@@ -557,6 +583,21 @@ function UPSnapshot:New(ent, boneList, proxy, withLocal)
 		self.MatTblLocal[boneName] = curParentMatrixInvert * self.MatTbl[boneName]
 	end
 
+	if drawDebug then
+		for boneName, mat in pairs(self.MatTbl) do
+			local pos = mat:GetTranslation()
+			debugoverlay.Box(
+				pos, 
+				self.DebugBoxMins, 
+				self.DebugBoxMaxs, 
+				self.DebugBoxLifeTime, 
+				withLocal and self.DebugBoxColorLocal or self.DebugBoxColorWorld
+			)
+			debugoverlay.Text(pos, boneName, self.DebugBoxLifeTime, false)
+		end
+	end
+
+
     return self
 end
 
@@ -564,10 +605,13 @@ UPSnapshot.UPMaLerpBoneWorld = ENTITY.UPMaLerpBoneWorld
 UPSnapshot.UPMaLerpBoneLocal = ENTITY.UPMaLerpBoneLocal
 UPSnapshot.UPMaLerpBoneWorldBatch = ENTITY.UPMaLerpBoneWorldBatch
 UPSnapshot.UPMaLerpBoneLocalBatch = ENTITY.UPMaLerpBoneLocalBatch
+UPSnapshot.UPMaLerpBoneWorldBatchEasy = ENTITY.UPMaLerpBoneWorldBatchEasy
+UPSnapshot.UPMaLerpBoneLocalBatchEasy = ENTITY.UPMaLerpBoneLocalBatchEasy
+UPSnapshot.UPMaPrintLog = ENTITY.UPMaPrintLog
 
 function UPSnapshot:GetBoneMatrixLocal(boneName)
 	if not self.MatTblLocal then
-		ErrorNoHaltWithStack('you can not do GetBoneMatrixLocal on a snapshot without local cache')
+		error('you can not do GetBoneMatrixLocal on a snapshot without local cache')
 	else
 		return self.MatTblLocal[boneName]
 	end
@@ -578,60 +622,68 @@ function UPSnapshot:UPMaGetBoneMatrix(boneName)
 end
 
 function UPSnapshot:UPMaGetParentMatrix(boneName)
-	return self.MatParentTbl[boneName]
+	if not self.MatTblLocal then
+		error('you can not do GetParentMatrix on a snapshot without local cache')
+	else
+		return self.MatParentTbl[boneName]
+	end
 end
 
 function UPSnapshot:UPMaSetBonePosition() 
-	ErrorNoHaltWithStack('you can not do UPMaSetBonePosition on a snapshot')
+	error('you can not do UPMaSetBonePosition on a snapshot')
 end
 
 function UPSnapshot:UPMaSetBonePos() 
-	ErrorNoHaltWithStack('you can not do UPMaSetBonePos on a snapshot')
+	error('you can not do UPMaSetBonePos on a snapshot')
 end
 
 function UPSnapshot:UPMaSetBoneAng()
-	ErrorNoHaltWithStack('you can not do UPMaSetBoneAng on a snapshot')
+	error('you can not do UPMaSetBoneAng on a snapshot')
 end
 
 function UPSnapshot:UPMaSetBoneScale()
-	ErrorNoHaltWithStack('you can not do UPMaSetBoneScale on a snapshot')
+	error('you can not do UPMaSetBoneScale on a snapshot')
+end
+
+function UPSnapshot:UPManipBoneBatch()
+	error('you can not do UPManipBoneBatch on a snapshot')
 end
 
 -- ================================== 默认代理器 ===========================
 -- 这里把根骨骼扩张到实体本身
 -- ================================== 默认代理器 ===========================
-UPManip.DefaultPlayerProxy = {}
-UPManip.DefaultPlayerProxy.Name = '默认玩家骨骼代理'
+UPManip.ExpandSelfProxy = {}
+UPManip.ExpandSelfProxy.Name = '默认玩家骨骼代理'
 
-function UPManip.DefaultPlayerProxy:SetPosition(ent, boneName, posw, angw)
+function UPManip.ExpandSelfProxy:SetPosition(ent, boneName, posw, angw)
 	if boneName == 'SELF' then
-		self:SetPos(posw)
-		self:SetAngles(angw)
+		ent:SetPos(posw)
+		ent:SetAngles(angw)
 		return SUCC_FLAG
 	else
 		return ent:UPMaSetBonePosition(boneName, posw, angw)
 	end
 end
 
-function UPManip.DefaultPlayerProxy:SetPos(ent, boneName, posw)
+function UPManip.ExpandSelfProxy:SetPos(ent, boneName, posw)
 	if boneName == 'SELF' then
-		self:SetPos(posw)
+		ent:SetPos(posw)
 		return SUCC_FLAG
 	else
 		return ent:UPMaSetBonePos(boneName, posw)
 	end
 end
 
-function UPManip.DefaultPlayerProxy:SetAng(ent, boneName, angw)
+function UPManip.ExpandSelfProxy:SetAng(ent, boneName, angw)
 	if boneName == 'SELF' then
-		self:SetAngles(angw)
+		ent:SetAngles(angw)
 		return SUCC_FLAG
 	else
 		return ent:UPMaSetBoneAng(boneName, angw)
 	end
 end
 
-function UPManip.DefaultPlayerProxy:GetMatrix(ent, boneName, mode)
+function UPManip.ExpandSelfProxy:GetMatrix(ent, boneName, mode)
 	if boneName == 'SELF' then
 		return ent:GetWorldTransformMatrix()
 	else
@@ -639,7 +691,7 @@ function UPManip.DefaultPlayerProxy:GetMatrix(ent, boneName, mode)
 	end
 end
 
-function UPManip.DefaultPlayerProxy:GetParentMatrix(ent, boneName, mode)
+function UPManip.ExpandSelfProxy:GetParentMatrix(ent, boneName, mode)
 	if boneName == 'SELF' then
 		return nil
 	else
@@ -651,124 +703,124 @@ function UPManip.DefaultPlayerProxy:GetParentMatrix(ent, boneName, mode)
 end
 
 -- ================================== 示例 ===========================
+local XYNormal = UPar and UPar.XYNormal or function(v)
+	return Vector(v.x, v.y, 0):GetNormalized()
+end
 
-concommand.Add('upmanip_test_world', function(ply)
+
+concommand.Add('upmanip_test', function(ply, cmd, args)
+	-- 操作标志位, 默认操作矩阵
+	-- 0x01 纯坐标
+	-- 0x02 纯角度
+	-- 0x04 纯缩放
+	-- 0x03 坐标 + 角度
+	-- 0x07 矩阵
+
+	local manipflag = tonumber(args[1]) or UPManip.MANIP_FLAG.MANIP_MATRIX
+	local lerpMode = !!args[2]
+
 	local pos = ply:GetPos()
-	pos = pos + UPar.XYNormal(ply:GetAimVector()) * 100
+	pos = pos + XYNormal(ply:GetAimVector()) * 100
 
 	local mossman = ClientsideModel('models/mossman.mdl', RENDERGROUP_OTHER)
-	local mossman2 = ClientsideModel('models/mossman.mdl', RENDERGROUP_OTHER)
+	local gman_high = ClientsideModel('models/gman_high.mdl', RENDERGROUP_OTHER)
 
 	mossman:SetPos(pos)
-	mossman2:SetPos(pos)
+	mossman:SetupBones()
 
+	-- 初始化 gman_high 动画
+	gman_high:ResetSequenceInfo()
+	gman_high:SetPlaybackRate(1)
+	gman_high:ResetSequence(gman_high:LookupSequence('crouch_reload_pistol'))
+
+	-- 指定要操作的骨骼
 	local boneList = {
+		'ValveBiped.Bip01_Spine',
+		'ValveBiped.Bip01_Spine1',
+		'ValveBiped.Bip01_Spine2',
+		'ValveBiped.Bip01_L_Clavicle',
+		'ValveBiped.Bip01_L_UpperArm',
+		'ValveBiped.Bip01_L_Forearm',
+		'ValveBiped.Bip01_L_Hand',
+		'ValveBiped.Bip01_R_Clavicle',
+		'ValveBiped.Bip01_R_UpperArm',
+		'ValveBiped.Bip01_R_Forearm',
+		'ValveBiped.Bip01_R_Hand',
+		'ValveBiped.Bip01_Neck1',
 		'ValveBiped.Bip01_Head1'
 	}
-	local proxy = UPManip.DefaultPlayerProxy
 
-	local ang = 0
-	timer.Create('upmanip_test_world', 0, 0, function()
-		if not IsValid(mossman) or not IsValid(mossman2) then 
-			timer.Remove('upmanip_test_world')
+	-- 启用快照作为初始状态
+	-- 使用代理器
+	local proxy = setmetatable({}, {__index = UPManip.ExpandSelfProxy})
+	local initSnapshot = UPSnapshot:New(mossman, boneList, proxy, false, true)
+	local timerCount = 0
+	local scaleOff = Matrix()
+
+	scaleOff:SetScale(Vector(2, 2, 2))
+
+	-- 所有骨骼放大两倍
+	-- 使用的时候不必像演示这样硬编码, 可以将偏移矩阵挂在 proxy 表里面, 通过self访问...
+	proxy.GetMatrix = function(self, ent, boneName, mode)
+		local mat = UPManip.ExpandSelfProxy:GetMatrix(ent, boneName, mode)
+		local finalFlag = UPManip.GET_MATRIX_FLAG.FINAL
+		local isFinal = bit.band(mode, finalFlag) == finalFlag
+		if not isFinal then return mat end
+		if not mat then return nil end
+		return mat * scaleOff
+	end
+
+	timer.Create('upmanip_test', 0, 0, function()
+		if not IsValid(mossman) or not IsValid(gman_high) then 
+			timer.Remove('upmanip_test')
 			return
 		end
 
-		mossman2:SetPos(pos + Vector(math.cos(ang) * 100, math.sin(ang) * 100, 0))
-		mossman2:SetupBones()
+		-- 循环 gman_high 动画
+		gman_high:SetCycle((gman_high:GetCycle() + FrameTime()) % 1)
+		gman_high:SetPos(pos + Vector(math.cos(timerCount) * 100, math.sin(timerCount) * 100, 0))
+		gman_high:SetupBones()
 		mossman:SetupBones()
 
-		local resultBatch, runtimeflags = mossman:UPMaLerpBoneWorldBatch(
-			boneList,
-			0.1, 
-			mossman, 
-			mossman2)
+		-- 批量插值
+		local resultBatch, runtimeflags = nil
+		if not lerpMode then
+			resultBatch, runtimeflags = initSnapshot:UPMaLerpBoneWorldBatchEasy(
+				boneList,
+				math.Clamp(timerCount, 0, 1), 
+				initSnapshot, 
+				gman_high,
+				proxy
+			)
+		else
+			resultBatch, runtimeflags = initSnapshot:UPMaLerpBoneLocalBatchEasy(
+				boneList,
+				math.Clamp(timerCount, 0, 1), 
+				initSnapshot, 
+				gman_high,
+				proxy
+			)
+		end
+
+		-- 日志
 		mossman:UPMaPrintLog(runtimeflags)
 
+		-- 批量控制
 		local runtimeflag = mossman:UPManipBoneBatch(
 			resultBatch, 
 			boneList, 
-			UPManip.MANIP_FLAG.MANIP_MATRIX,
+			manipflag,
 			proxy
 		)
 
+		-- 日志
 		mossman:UPMaPrintLog(runtimeflag)
 		
-		ang = ang + FrameTime()
+		timerCount = timerCount + FrameTime()
 	end)
 
 	timer.Simple(5, function()
 		if IsValid(mossman) then mossman:Remove() end
-		if IsValid(mossman2) then mossman2:Remove() end
+		if IsValid(gman_high) then gman_high:Remove() end
 	end)
 end)
-
-// concommand.Add('upmanip_test_local', function(ply)
-// 	local pos = ply:GetPos()
-// 	pos = pos + UPar.XYNormal(ply:GetAimVector()) * 100
-
-// 	local pos2 = pos + Vector(0, 100, 0)
-
-// 	local mossman = ClientsideModel('models/mossman.mdl', RENDERGROUP_OTHER)
-// 	local mossman2 = ClientsideModel('models/gman_high.mdl', RENDERGROUP_OTHER)
-
-// 	mossman:SetPos(pos)
-	
-// 	mossman2:SetPos(pos2)
-// 	mossman2:ResetSequenceInfo()
-// 	mossman2:SetPlaybackRate(1)
-// 	mossman2:ResetSequence(mossman2:LookupSequence('crouch_reload_pistol'))
-
-// 	local bones = {
-// 		'ValveBiped.Bip01_Spine',
-// 		'ValveBiped.Bip01_Spine1',
-// 		'ValveBiped.Bip01_Spine2',
-// 		'ValveBiped.Bip01_L_Clavicle',
-// 		'ValveBiped.Bip01_L_UpperArm',
-// 		'ValveBiped.Bip01_L_Forearm',
-// 		'ValveBiped.Bip01_L_Hand',
-// 		'ValveBiped.Bip01_R_Clavicle',
-// 		'ValveBiped.Bip01_R_UpperArm',
-// 		'ValveBiped.Bip01_R_Forearm',
-// 		'ValveBiped.Bip01_R_Hand',
-// 		'ValveBiped.Bip01_Neck1',
-// 		'ValveBiped.Bip01_Head1'
-// 	}
-
-// 	local boneIterator = {}
-// 	for i, boneName in ipairs(bones) do
-// 		boneIterator[i] = {bone = boneName}
-// 	end
-
-// 	UPManip.InitBoneIterator(boneIterator)
-
-// 	mossman:SetupBones()
-// 	mossman2:SetupBones()
-
-// 	local ang = 0
-// 	timer.Create('upmanip_test_local', 0, 0, function()
-// 		if not IsValid(mossman) or not IsValid(mossman2) then 
-// 			timer.Remove('upmanip_test_local')
-// 			return
-// 		end
-
-// 		mossman2:SetCycle((mossman2:GetCycle() + FrameTime()) % 1)
-// 		mossman2:SetupBones()
-
-// 		mossman:SetupBones()
-
-// 		local lerpSnapshot, runtimeflags = mossman:UPMaLerpBoneBatch(
-// 			0.1, mossman, mossman2, boneIterator)
-// 		mossman:UPMaPrintErr(runtimeflags)
-// 		local runtimeflag = mossman:UPManipBoneBatch(lerpSnapshot, 
-// 			boneIterator, MANIP_MATRIX)
-// 		mossman:UPMaPrintErr(runtimeflag)
-		
-// 		ang = ang + FrameTime()
-// 	end)
-		
-// 	timer.Simple(5, function()
-// 		if IsValid(mossman) then mossman:Remove() end
-// 		if IsValid(mossman2) then mossman2:Remove() end
-// 	end)
-// end)
