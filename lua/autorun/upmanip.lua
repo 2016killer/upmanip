@@ -391,9 +391,9 @@ UPManip.LERP_SPACE = {
 	LERP_SKIP = LERP_SKIP,
 }
 
-function ENTITY:UPMaGetBoneMatrix(boneName, proxy, mode)
+function ENTITY:UPMaGetBoneMatrix(boneName, proxy, PROXY_FLAG_GET_MATRIX)
 	if proxy and proxy.GetMatrix then
-		return proxy:GetMatrix(self, boneName, mode)
+		return proxy:GetMatrix(self, boneName, PROXY_FLAG_GET_MATRIX)
 	else
 		local boneId = self:LookupBone(boneName)
 		if not boneId then return nil end
@@ -401,9 +401,9 @@ function ENTITY:UPMaGetBoneMatrix(boneName, proxy, mode)
 	end
 end
 
-function ENTITY:UPMaGetParentMatrix(boneName, proxy, mode)
+function ENTITY:UPMaGetParentMatrix(boneName, proxy, PROXY_FLAG_GET_MATRIX)
 	if proxy and proxy.GetParentMatrix then
-		return proxy:GetParentMatrix(self, boneName, mode)
+		return proxy:GetParentMatrix(self, boneName, PROXY_FLAG_GET_MATRIX)
 	else
 		local boneId = self:LookupBone(boneName)
 		if not boneId then return nil end
@@ -426,7 +426,7 @@ function ENTITY:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy)
 	if not finalMatrix then return nil, bit.bor(ERR_FLAG_NO_FINAL_MATRIX, STACK_FLAG_LERP_WORLD) end
 
 	if proxy and proxy.AdjustLerpRange then
-		t, initMatrix, finalMatrix = proxy:AdjustLerpRange(self, boneName, ent1, ent2, t, initMatrix, finalMatrix, LERP_WORLD)
+		t, initMatrix, finalMatrix = proxy:AdjustLerpRange(self, boneName, t, initMatrix, finalMatrix, ent1, ent2, LERP_WORLD)
 	end
 
 	local result = Matrix()
@@ -475,7 +475,7 @@ function ENTITY:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy)
 	end
 
 	if proxy and proxy.AdjustLerpRange then
-		t, initMatrixLocal, finalMatrixLocal = proxy:AdjustLerpRange(self, boneName, ent1, ent2, t, initMatrixLocal, finalMatrixLocal, LERP_LOCAL)
+		t, initMatrixLocal, finalMatrixLocal = proxy:AdjustLerpRange(self, boneName, t, initMatrixLocal, finalMatrixLocal, ent1, ent2, LERP_LOCAL)
 	end
 
 	-- 起始局部插值可以直接算的, 但是为了数据一致性还是多算一个, 否则局部变换非人类, 外部要改还是要算
@@ -767,8 +767,12 @@ function UPManip.ExpandSelfProxy:GetParentMatrix(ent, boneName, PROXY_FLAG_GET_M
 	end
 end
 
-// function UPManip.ExpandSelfProxy:AdjustLerpRange(ent, boneName, ent1, ent2, t, initMat, finalMat, PROXY_FLAG_ADJUST)
+// function UPManip.ExpandSelfProxy:AdjustLerpRange(ent, boneName, t, initMat, finalMat, ent1, ent2, PROXY_FLAG_ADJUST)
+// 	return t, initMat, finalMat
+// end
 
+// function UPManip.ExpandSelfProxy:GetLerpSpace(ent, boneName, t, ent1, ent2)
+// 	return UPManip.LERP_SPACE.LERP_LOCAL
 // end
 
 -- ================================== 示例 ===========================
@@ -823,23 +827,10 @@ concommand.Add('upmanip_test', function(ply, cmd, args)
 
 	-- 启用快照作为初始状态
 	-- 使用代理器
-	local proxy = setmetatable({}, {__index = UPManip.ExpandSelfProxy})
+	local proxy = UPManip.ExpandSelfProxy
 	local initSnapshot = mossman:UPMaSnapshot(boneList, proxy, isLerpLocal, true)
 	local timerCount = 0
-	local scaleOff = Matrix()
 
-	scaleOff:SetScale(Vector(1, 1, 1))
-
-	-- 所有骨骼放大两倍
-	-- 使用的时候不必像演示这样硬编码, 可以将偏移矩阵挂在 proxy 表里面, 通过self访问...
-	function proxy:GetMatrix(ent, boneName, mode)
-		local mat = UPManip.ExpandSelfProxy:GetMatrix(ent, boneName, mode)
-		local finalFlag = UPManip.PROXY_FLAG_GET_MATRIX.FINAL
-		local isFinal = bit.band(mode, finalFlag) == finalFlag
-		if not isFinal then return mat end
-		if not mat then return nil end
-		return mat * scaleOff
-	end
 
 	timer.Create('upmanip_test', 0, 0, function()
 		if not IsValid(mossman) or not IsValid(gman_high) then 
