@@ -60,7 +60,7 @@ g_ManipLegs = {}
 
 local ManipLegs = g_ManipLegs
 
-ManipLegs.ForwardOffset = 
+ManipLegs.ForwardOffset = -22
 
 ManipLegs.BonesToRemove = {
 	['ValveBiped.Bip01_Head1'] = true,
@@ -81,7 +81,7 @@ ManipLegs.BonesToRemove = {
 
 
 -- ==============================================================
--- 帧循环钩子：添加「上下文起始+上下文结束」两个自定义钩子检查（返回true即睡眠）
+-- 帧循环钩子：添加
 -- 自定义钩子名：UPExtLegsManipFrameContextStart（上下文起始）、UPExtLegsManipFrameContextEnd（上下文结束）
 -- ==============================================================
 ManipLegs.FRAME_LOOP_HOOK = {
@@ -153,69 +153,6 @@ function ManipLegs:StartLerp(startEnt, fadeInSpeed, fadeOutSpeed)
 	self.LerpT = 0
 	self:Wake()
 	hook.Run('UPExtLegsManipStartLerp', self, startEnt)
-end
-
-function ManipLegs:GetRunState()
-	local hasSnapshot = istable(self.Snapshot) and next(self.Snapshot) ~= nil
-	return hasSnapshot and IsValid(LocalPlayer()) and IsValid(self.LegEnt)
-end
-
-function ManipLegs:RunTimeTargetEmptyCheck()
-	local targetValid = isentity(self.Target) and IsValid(self.Target)
-	if not targetValid then
-		self.Target = nil
-	end
-
-	local targetChanged = self.LastTarget ~= self.Target
-	if targetChanged then
-		self.LerpT = 0
-		hook.Run('UPExtLegsManipTargetChanged', self)
-	end
-
-	self.LastTarget = self.Target
-	return targetChanged
-end
-
-function ManipLegs:ChangeTarget(target, cached)
-	cached = cached or {}
-	self.Target = IsValid(target) and target or nil
-	self.LastTarget = self.Target
-	self.LerpT = 0
-	hook.Run('UPExtLegsManipTargetChanged', self)
-end
-
-function ManipLegs:UpdatePosition()
-	if not IsValid(LocalPlayer()) then
-		return
-	end
-
-	local ply = LocalPlayer()
-	local IsPlyCrouching = ply:Crouching()
-	local BiaisAngles = sharpeye_focus && sharpeye_focus.GetBiaisViewAngles && sharpeye_focus:GetBiaisViewAngles() || LocalPlayer():EyeAngles()
-	local RadAngle = math.rad(BiaisAngles.y)
-
-	local NewPos = IsPlyCrouching and ply:GetPos() or ply:GetPos() + self.MagicOffset
-	local NewAngle = Angle(0, BiaisAngles.y, 0)
-	
-	NewPos.x = NewPos.x + math.cos(RadAngle) * self.ForwardOffset
-	NewPos.y = NewPos.y + math.sin(RadAngle) * self.ForwardOffset
-	if ply:GetGroundEntity() == NULL then
-		NewPos.z = NewPos.z + self.MagicOffsetZ0
-		if ply:KeyDown(IN_DUCK) then
-			NewPos.z = NewPos.z + self.MagicOffsetZ1
-		end
-	end
-	
-	local PosOverride, AngOverride = hook.Run('UPExtLegsManipUpdatePosition', self, NewPos, NewAngle)
-
-	self.NewPos = PosOverride or NewPos
-	self.NewAngle = AngOverride or NewAngle
-
-	if IsValid(self.LegEnt) then
-		self.LegEnt:SetPos(self.NewPos)
-		self.LegEnt:SetAngles(self.NewAngle)
-		self.LegEnt:SetupBones()
-	end
 end
 
 function ManipLegs:UpdateAnimation(dt)
