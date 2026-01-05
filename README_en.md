@@ -1,3 +1,8 @@
+<p align="center">
+  <a href="./README_en.md">English</a> |
+  <a href="./README.md">简体中文</a>
+</p>
+
 - Author: 白狼 2322012547@qq.com
 - Translator: Miss DouBao
 - Date: December 10, 2025
@@ -21,7 +26,9 @@ Contribution: Chinese and English documentation
 Test the core functionality directly by entering `upmanip_test` in the game console. The command supports two parameters:
 - 1st parameter: Manipulation flag (0x01=position only / 0x02=angle only / 0x04=scale only / 0x03=position+angle / 0x07=full matrix), default 0x07
 - 2nd parameter: Any value (enables local space interpolation; omit for world space interpolation)
-Example: Enter `upmanip_test 0x03 1` to test bone animation with "position+angle" mode using local interpolation.
+
+
+![client](./materials/upgui/4000_2542.jpg)
 
 ## Overview
 UPManip is a bone manipulation library for Garry's Mod (GMod), primarily designed to address the 128-unit distance limit and interpolation inaccuracies of the native `ManipulateBonePosition` function. Its core goal is to make bone interpolation more flexible and computationally efficient, while introducing two practical features: Proxies and Snapshots. Debugging is simplified with built-in error logging for quick issue identification.
