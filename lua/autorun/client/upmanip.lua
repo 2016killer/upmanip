@@ -769,7 +769,7 @@ function UPManip.ExpandSelfProxy:GetParentMatrix(ent, boneName, mode)
 	end
 end
 
-UPManip.ExpandSelfProxy.AdjustLerpResult(ent, boneName, resultMatrix, stack) = nil
+UPManip.ExpandSelfProxy.AdjustLerpResult = nil
 
 
 -- ================================== 示例 ===========================
