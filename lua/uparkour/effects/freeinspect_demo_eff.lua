@@ -1,6 +1,3 @@
-
-if not GetConVar('developer') or not GetConVar('developer'):GetBool() then return end
-
 local effect = UPEffect:Register('freeinspect_demo', 'default', {
 	label = '#default', 
 	AAAACreat = '白狼'

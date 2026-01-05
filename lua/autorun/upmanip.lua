@@ -29,6 +29,7 @@
 		然后插值的时候直接用 c_hand 的骨骼名就能访问数据, 如果使用了代理器反而会错, 这样的话
 		开发者必须手动管理好代理器和快照, 这就会导致代码异常混乱, 所以我会让代理器在其他时刻无效
 
+	关于代理器，一般来说有上下文的都会附带一个场景标志位
 --]]
 
 if SERVER then 
@@ -412,47 +413,47 @@ function ENTITY:UPMaGetParentMatrix(boneName, proxy, mode)
 	end
 end
 
-function ENTITY:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy1, proxy2, proxySelf)
+function ENTITY:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy)
 	-- 实际上 ent1、ent2 的类型不一定要是实体, 也可以是 UPSnapshot
 	-- 一般在 UPMaLerpBoneWorldBatch 中调用, 所以不作验证
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
-	local initMatrix = ent1:UPMaGetBoneMatrix(boneName, proxy1, INIT_LERP_WORLD)
+	local initMatrix = ent1:UPMaGetBoneMatrix(boneName, proxy, INIT_LERP_WORLD)
 	if not initMatrix then return nil, bit.bor(ERR_FLAG_NO_INIT_MATRIX, STACK_FLAG_LERP_WORLD) end
 
-	local finalMatrix = ent2:UPMaGetBoneMatrix(boneName, proxy2, FINAL_LERP_WORLD)
+	local finalMatrix = ent2:UPMaGetBoneMatrix(boneName, proxy, FINAL_LERP_WORLD)
 	if not finalMatrix then return nil, bit.bor(ERR_FLAG_NO_FINAL_MATRIX, STACK_FLAG_LERP_WORLD) end
+
+	if proxy and proxy.AdjustLerpRange then
+		t, initMatrix, finalMatrix = proxy:AdjustLerpRange(self, boneName, ent1, ent2, t, initMatrix, finalMatrix, LERP_WORLD)
+	end
 
 	local result = Matrix()
 	result:SetTranslation(LerpVector(t, initMatrix:GetTranslation(), finalMatrix:GetTranslation()))
 	result:SetAngles (LerpAngle(t, initMatrix:GetAngles(), finalMatrix:GetAngles()))
 	result:SetScale(LerpVector(t, initMatrix:GetScale(), finalMatrix:GetScale()))
 	
-	if proxySelf and proxySelf.AdjustLerpResult then
-		result = proxySelf:AdjustLerpResult(self, boneName, result, LERP_WORLD)
-	end
-		
 	return result, SUCC_FLAG
 end
 
-function ENTITY:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy1, proxy2, proxySelf)
+function ENTITY:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy)
 	-- 实际上 ent1、ent2 的类型不一定要是实体, 也可以是 UPSnapshot
 	-- 一般在 UPMaLerpBoneLocalBatch 中调用, 所以不作验证
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
 	-- 注意, 这里用的是代理父级和 UPMaGetBonexxx 系列不同, 看log的栈来辨别
-	local curParentMatrix = self:UPMaGetParentMatrix(boneName, proxySelf, CUR_LERP_LOCAL)
+	local curParentMatrix = self:UPMaGetParentMatrix(boneName, proxy, CUR_LERP_LOCAL)
 	if not curParentMatrix then return nil, bit.bor(ERR_FLAG_NO_PARENT, STACK_FLAG_LERP_LOCAL) end
 
 	-- 对于快照可以使用缓存
 	local initMatrixLocal = ent1.GetBoneMatrixLocal and ent1:GetBoneMatrixLocal(boneName) or nil
 	if not initMatrixLocal then
-		local initMatrix = ent1:UPMaGetBoneMatrix(boneName, proxy1, INIT_LERP_LOCAL)
+		local initMatrix = ent1:UPMaGetBoneMatrix(boneName, proxy, INIT_LERP_LOCAL)
 		if not initMatrix then return nil, bit.bor(ERR_FLAG_NO_INIT_MATRIX, STACK_FLAG_LERP_LOCAL) end
 
-		local initParentMatrixInvert = ent1:UPMaGetParentMatrix(boneName, proxy1, INIT_LERP_LOCAL)
+		local initParentMatrixInvert = ent1:UPMaGetParentMatrix(boneName, proxy, INIT_LERP_LOCAL)
 		if not initParentMatrixInvert then return nil, bit.bor(ERR_FLAG_NO_INIT_PARENT_MATRIX, STACK_FLAG_LERP_LOCAL) end
 		local notSingular = initParentMatrixInvert:Invert()
 		if not notSingular then return nil, bit.bor(ERR_FLAG_INIT_PARENT_SINGULAR, STACK_FLAG_LERP_LOCAL) end
@@ -462,15 +463,19 @@ function ENTITY:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy1, proxy2, proxy
 	
 	local finalMatrixLocal = ent2.GetBoneMatrixLocal and ent2:GetBoneMatrixLocal(boneName) or nil
 	if not finalMatrixLocal then
-		local finalMatrix = ent2:UPMaGetBoneMatrix(boneName, proxy2, FINAL_LERP_LOCAL)
+		local finalMatrix = ent2:UPMaGetBoneMatrix(boneName, proxy, FINAL_LERP_LOCAL)
 		if not finalMatrix then return nil, bit.bor(ERR_FLAG_NO_FINAL_MATRIX, STACK_FLAG_LERP_LOCAL) end
 
-		local finalParentMatrixInvert = ent2:UPMaGetParentMatrix(boneName, proxy2, FINAL_LERP_LOCAL)
+		local finalParentMatrixInvert = ent2:UPMaGetParentMatrix(boneName, proxy, FINAL_LERP_LOCAL)
 		if not finalParentMatrixInvert then return nil, bit.bor(ERR_FLAG_NO_FINAL_PARENT_MATRIX, STACK_FLAG_LERP_LOCAL) end
 		local notSingular = finalParentMatrixInvert:Invert()
 		if not notSingular then return nil, bit.bor(ERR_FLAG_FINAL_PARENT_SINGULAR, STACK_FLAG_LERP_LOCAL) end
 
 		finalMatrixLocal = finalParentMatrixInvert * finalMatrix
+	end
+
+	if proxy and proxy.AdjustLerpRange then
+		t, initMatrixLocal, finalMatrixLocal = proxy:AdjustLerpRange(self, boneName, ent1, ent2, t, initMatrixLocal, finalMatrixLocal, LERP_LOCAL)
 	end
 
 	-- 起始局部插值可以直接算的, 但是为了数据一致性还是多算一个, 否则局部变换非人类, 外部要改还是要算
@@ -480,21 +485,15 @@ function ENTITY:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy1, proxy2, proxy
 	result:SetScale(LerpVector(t, initMatrixLocal:GetScale(), finalMatrixLocal:GetScale()))
 	result = curParentMatrix * result
 
-	if proxySelf and proxySelf.AdjustLerpResult then
-		result = proxySelf:AdjustLerpResult(self, boneName, result, LERP_LOCAL)
-	end
-
 	return result, SUCC_FLAG
 end
 
-function ENTITY:UPMaLerpBoneWorldBatch(boneList, t, ent1, ent2, proxy1, proxy2, proxySelf)
+function ENTITY:UPMaLerpBoneWorldBatch(boneList, t, ent1, ent2, proxy)
 	-- 一般在帧循环中调用, 所以不作太多验证
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
-	assert(istable(proxy1) or proxy1 == nil, 'proxy1 must be a table or nil')
-	assert(istable(proxy2) or proxy2 == nil, 'proxy2 must be a table or nil')
-	assert(istable(proxySelf) or proxySelf == nil, 'proxySelf must be a table or nil')
+	assert(istable(proxy) or proxy == nil, 'proxy must be a table or nil')
 	assert(isnumber(t), 't must be a number')
 	assert(istable(boneList), 'boneList must be a table')
 
@@ -502,7 +501,7 @@ function ENTITY:UPMaLerpBoneWorldBatch(boneList, t, ent1, ent2, proxy1, proxy2, 
 	local flags = {}
 
 	for _, boneName in ipairs(boneList) do
-		local result, flag = self:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy1, proxy2, proxySelf)
+		local result, flag = self:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy)
 		resultBatch[boneName] = result
 		flags[boneName] = flag
 	end
@@ -510,14 +509,12 @@ function ENTITY:UPMaLerpBoneWorldBatch(boneList, t, ent1, ent2, proxy1, proxy2, 
 	return resultBatch, flags
 end
 
-function ENTITY:UPMaLerpBoneLocalBatch(boneList, t, ent1, ent2, proxy1, proxy2, proxySelf)
+function ENTITY:UPMaLerpBoneLocalBatch(boneList, t, ent1, ent2, proxy)
 	-- 一般在帧循环中调用, 所以不作太多验证
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
-	assert(istable(proxy1) or proxy1 == nil, 'proxy1 must be a table or nil')
-	assert(istable(proxy2) or proxy2 == nil, 'proxy2 must be a table or nil')
-	assert(istable(proxySelf) or proxySelf == nil, 'proxySelf must be a table or nil')
+	assert(istable(proxy) or proxy == nil, 'proxy must be a table or nil')
 	assert(isnumber(t), 't must be a number')
 	assert(istable(boneList), 'boneList must be a table')
 
@@ -525,22 +522,12 @@ function ENTITY:UPMaLerpBoneLocalBatch(boneList, t, ent1, ent2, proxy1, proxy2, 
 	local flags = {}
 
 	for _, boneName in ipairs(boneList) do
-		local result, flag = self:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy1, proxy2, proxySelf)
+		local result, flag = self:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy)
 		resultBatch[boneName] = result
 		flags[boneName] = flag
 	end
 
 	return resultBatch, flags
-end
-
-function ENTITY:UPMaLerpBoneWorldBatchEasy(boneList, t, ent1, ent2, proxy)
-	-- 使用同一个代理器
-	return self:UPMaLerpBoneWorldBatch(boneList, t, ent1, ent2, proxy, proxy, proxy)
-end
-
-function ENTITY:UPMaLerpBoneLocalBatchEasy(boneList, t, ent1, ent2, proxy)
-	-- 使用同一个代理器
-	return self:UPMaLerpBoneLocalBatch(boneList, t, ent1, ent2, proxy, proxy, proxy)
 end
 
 local function __internal_DefaultLerpSpace()
@@ -561,9 +548,9 @@ function ENTITY:UPMaFreeLerpBatch(boneList, t, ent1, ent2, proxy)
 		local lerpSpace = GetLerpSpace(proxy, self, boneName, t, ent1, ent2)
 		local result, flag = nil
 		if lerpSpace == LERP_WORLD then
-			result, flag = self:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy, proxy, proxy)
+			result, flag = self:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy)
 		elseif lerpSpace == LERP_LOCAL then
-			result, flag = self:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy, proxy, proxy)
+			result, flag = self:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy)
 		elseif lerpSpace ~= LERP_SKIP then
 			error('unknown lerp space', lerpSpace)
 		end
@@ -620,7 +607,7 @@ UPSnapshot.DebugBoxColorWorld = Color(0, 255, 0)
 
 function UPSnapshot:New(ent, boneList, proxy, withLocal, drawDebug)
 	-- 需要在外部调用 ent:SetupBones()
-	assert(isentity(ent) and ent:IsValid(), 'expect ent to be a valid entity')
+	assert(isentity(ent) and ent:IsValid() and ent:GetModel(), 'expect ent to be a valid entity with model')
 	assert(istable(boneList), 'expect boneList to be a table')
 	assert(istable(proxy) or proxy == nil, 'expect proxy to be a table or nil')
 
@@ -628,6 +615,7 @@ function UPSnapshot:New(ent, boneList, proxy, withLocal, drawDebug)
     self.MatTbl = {}
 	self.MatTblLocal = withLocal and {} or nil
 	self.MatParentTbl = withLocal and {} or nil
+	self.Model = ent:GetModel()
 
 	for _, boneName in ipairs(boneList) do
 		assert(isstring(boneName), 'expect boneName to be a string')
@@ -666,8 +654,7 @@ UPSnapshot.UPMaLerpBoneWorld = ENTITY.UPMaLerpBoneWorld
 UPSnapshot.UPMaLerpBoneLocal = ENTITY.UPMaLerpBoneLocal
 UPSnapshot.UPMaLerpBoneWorldBatch = ENTITY.UPMaLerpBoneWorldBatch
 UPSnapshot.UPMaLerpBoneLocalBatch = ENTITY.UPMaLerpBoneLocalBatch
-UPSnapshot.UPMaLerpBoneWorldBatchEasy = ENTITY.UPMaLerpBoneWorldBatchEasy
-UPSnapshot.UPMaLerpBoneLocalBatchEasy = ENTITY.UPMaLerpBoneLocalBatchEasy
+UPSnapshot.UPMaFreeLerpBatch = ENTITY.UPMaFreeLerpBatch
 UPSnapshot.UPMaPrintLog = ENTITY.UPMaPrintLog
 
 function UPSnapshot:GetBoneMatrixLocal(boneName)
@@ -710,6 +697,10 @@ function UPSnapshot:UPManipBoneBatch()
 	error('you can not do UPManipBoneBatch on a snapshot')
 end
 
+function UPSnapshot:GetModel()
+	return self.Model
+end
+
 -- ================================== 默认代理器 ===========================
 -- 这里把根骨骼扩张到实体本身
 -- ================================== 默认代理器 ===========================
@@ -717,7 +708,7 @@ UPManip.ValidateProxy = function(proxy)
 	assert(istable(proxy), 'expect proxy to be a table')
 	assert(isfunction(proxy.GetMatrix) or proxy.GetMatrix == nil, 'invalid field "GetMatrix", expect (function or nil)')
 	assert(isfunction(proxy.GetParentMatrix) or proxy.GetParentMatrix == nil, 'invalid field "GetParentMatrix", expect (function or nil)')
-	assert(isfunction(proxy.AdjustLerpResult) or proxy.AdjustLerpResult == nil, 'invalid field "AdjustLerpResult", expect (function or nil)')
+	assert(isfunction(proxy.AdjustLerpRange) or proxy.AdjustLerpRange == nil, 'invalid field "AdjustLerpRange", expect (function or nil)')
 	assert(isfunction(proxy.SetPosition) or proxy.SetPosition == nil, 'invalid field "SetPosition", expect (function or nil)')
 	assert(isfunction(proxy.SetPos) or proxy.SetPos == nil, 'invalid field "SetPos", expect (function or nil)')
 	assert(isfunction(proxy.SetAng) or proxy.SetAng == nil, 'invalid field "SetAng", expect (function or nil)')
@@ -757,7 +748,7 @@ function UPManip.ExpandSelfProxy:SetAng(ent, boneName, angw)
 	end
 end
 
-function UPManip.ExpandSelfProxy:GetMatrix(ent, boneName, mode)
+function UPManip.ExpandSelfProxy:GetMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
 	if boneName == 'SELF' then
 		return ent:GetWorldTransformMatrix()
 	else
@@ -765,7 +756,7 @@ function UPManip.ExpandSelfProxy:GetMatrix(ent, boneName, mode)
 	end
 end
 
-function UPManip.ExpandSelfProxy:GetParentMatrix(ent, boneName, mode)
+function UPManip.ExpandSelfProxy:GetParentMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
 	if boneName == 'SELF' then
 		return nil
 	else
@@ -776,8 +767,9 @@ function UPManip.ExpandSelfProxy:GetParentMatrix(ent, boneName, mode)
 	end
 end
 
-UPManip.ExpandSelfProxy.AdjustLerpResult = nil
+// function UPManip.ExpandSelfProxy:AdjustLerpRange(ent, boneName, ent1, ent2, t, initMat, finalMat, PROXY_FLAG_ADJUST)
 
+// end
 
 -- ================================== 示例 ===========================
 local XYNormal = UPar and UPar.XYNormal or function(v)
@@ -787,11 +779,13 @@ end
 
 concommand.Add('upmanip_test', function(ply, cmd, args)
 	-- 操作标志位, 默认操作矩阵
-	-- 0x01 纯坐标
-	-- 0x02 纯角度
-	-- 0x04 纯缩放
-	-- 0x03 坐标 + 角度
-	-- 0x07 矩阵
+	-- args[1]
+	-- 	0x01 纯坐标
+	-- 	0x02 纯角度
+	-- 	0x04 纯缩放
+	-- 	0x03 坐标 + 角度
+	--	0x07 矩阵
+	-- args[2] 插值空间
 
 	local manipflag = tonumber(args[1]) or UPManip.MANIP_FLAG.MANIP_MATRIX
 	local isLerpLocal = !!args[2]
@@ -862,7 +856,7 @@ concommand.Add('upmanip_test', function(ply, cmd, args)
 		-- 批量插值
 		local resultBatch, runtimeflags = nil
 		if not isLerpLocal then
-			resultBatch, runtimeflags = mossman:UPMaLerpBoneWorldBatchEasy(
+			resultBatch, runtimeflags = mossman:UPMaLerpBoneWorldBatch(
 				boneList,
 				math.Clamp(timerCount, 0, 1), 
 				initSnapshot, 
@@ -870,7 +864,7 @@ concommand.Add('upmanip_test', function(ply, cmd, args)
 				proxy
 			)
 		else
-			resultBatch, runtimeflags = mossman:UPMaLerpBoneLocalBatchEasy(
+			resultBatch, runtimeflags = mossman:UPMaLerpBoneLocalBatch(
 				boneList,
 				math.Clamp(timerCount, 0, 1), 
 				initSnapshot, 

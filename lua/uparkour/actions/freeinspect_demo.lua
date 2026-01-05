@@ -1,5 +1,3 @@
-if not GetConVar('developer') or not GetConVar('developer'):GetBool() then return end
-
 local freeinspect_demo = UPAction:Register('freeinspect_demo', {
 	AAAACreat = '白狼',
 	AAADesc = '#freeinspect_demo.desc',
