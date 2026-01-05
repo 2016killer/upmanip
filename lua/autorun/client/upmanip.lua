@@ -355,7 +355,7 @@ local FINAL_LERP_LOCAL = bit.bor(FINAL, LERP_LOCAL)
 // local CUR_LERP_WORLD = bit.bor(CUR, LERP_WORLD)
 local CUR_LERP_LOCAL = bit.bor(CUR, LERP_LOCAL)
 
-UPManip.GET_MATRIX_FLAG = {
+UPManip.PROXY_FLAG_GET_MATRIX = {
 	INIT = INIT,
 	FINAL = FINAL,
 	CUR = CUR,
@@ -372,6 +372,10 @@ UPManip.GET_MATRIX_FLAG = {
 	SNAPSHOT = SNAPSHOT,
 }
 
+UPManip.PROXY_FLAG_ADJUST = {
+	LERP_WORLD = LERP_WORLD,
+	LERP_LOCAL = LERP_LOCAL,
+}
 
 function ENTITY:UPMaGetBoneMatrix(boneName, proxy, mode)
 	if proxy then
@@ -412,6 +416,10 @@ function ENTITY:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy1, proxy2)
 	result:SetAngles (LerpAngle(t, initMatrix:GetAngles(), finalMatrix:GetAngles()))
 	result:SetScale(LerpVector(t, initMatrix:GetScale(), finalMatrix:GetScale()))
 	
+	if proxySelf and proxySelf.AdjustLerpResult then
+		result = proxySelf:AdjustLerpResult(self, boneName, result, LERP_WORLD)
+	end
+		
 	return result, SUCC_FLAG
 end
 
@@ -458,6 +466,10 @@ function ENTITY:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy1, proxy2, proxy
 	result:SetAngles (LerpAngle(t, initMatrixLocal:GetAngles(), finalMatrixLocal:GetAngles()))
 	result:SetScale(LerpVector(t, initMatrixLocal:GetScale(), finalMatrixLocal:GetScale()))
 	result = curParentMatrix * result
+
+	if proxySelf and proxySelf.AdjustLerpResult then
+		result = proxySelf:AdjustLerpResult(self, boneName, result, LERP_LOCAL)
+	end
 
 	return result, SUCC_FLAG
 end
@@ -547,6 +559,11 @@ function ENTITY:UPMaPrintLog(runtimeflag, boneName, depth)
 		return
 	end
 end
+
+
+function ENTITY:UPMaSnapshot(boneList, proxy, withLocal, drawDebug)
+	return UPSnapshot:New(self, boneList, proxy, withLocal, drawDebug)
+end
 -- ================================== 快照类 ===========================
 
 UPSnapshot = {}
@@ -559,9 +576,9 @@ UPSnapshot.DebugBoxColorWorld = Color(0, 255, 0)
 
 function UPSnapshot:New(ent, boneList, proxy, withLocal, drawDebug)
 	-- 需要在外部调用 ent:SetupBones()
-	assert(isbool(withLocal), 'expect withLocal to be a boolean')
-	assert(istable(boneList), 'expect boneList to be a table')
 	assert(isentity(ent) and ent:IsValid(), 'expect ent to be a valid entity')
+	assert(istable(boneList), 'expect boneList to be a table')
+	assert(istable(proxy) or proxy == nil, 'expect proxy to be a table or nil')
 
     local self = setmetatable({}, UPSnapshot)
     self.MatTbl = {}
@@ -702,6 +719,9 @@ function UPManip.ExpandSelfProxy:GetParentMatrix(ent, boneName, mode)
 	end
 end
 
+UPManip.ExpandSelfProxy.AdjustLerpResult(ent, boneName, resultMatrix, stack) = nil
+
+
 -- ================================== 示例 ===========================
 local XYNormal = UPar and UPar.XYNormal or function(v)
 	return Vector(v.x, v.y, 0):GetNormalized()
@@ -717,7 +737,7 @@ concommand.Add('upmanip_test', function(ply, cmd, args)
 	-- 0x07 矩阵
 
 	local manipflag = tonumber(args[1]) or UPManip.MANIP_FLAG.MANIP_MATRIX
-	local lerpMode = !!args[2]
+	local isLerpLocal = !!args[2]
 
 	local pos = ply:GetPos()
 	pos = pos + XYNormal(ply:GetAimVector()) * 100
@@ -753,17 +773,17 @@ concommand.Add('upmanip_test', function(ply, cmd, args)
 	-- 启用快照作为初始状态
 	-- 使用代理器
 	local proxy = setmetatable({}, {__index = UPManip.ExpandSelfProxy})
-	local initSnapshot = UPSnapshot:New(mossman, boneList, proxy, false, true)
+	local initSnapshot = mossman:UPMaSnapshot(boneList, proxy, isLerpLocal, true)
 	local timerCount = 0
 	local scaleOff = Matrix()
 
-	scaleOff:SetScale(Vector(2, 2, 2))
+	scaleOff:SetScale(Vector(1, 1, 1))
 
 	-- 所有骨骼放大两倍
 	-- 使用的时候不必像演示这样硬编码, 可以将偏移矩阵挂在 proxy 表里面, 通过self访问...
-	proxy.GetMatrix = function(self, ent, boneName, mode)
+	function proxy:GetMatrix(ent, boneName, mode)
 		local mat = UPManip.ExpandSelfProxy:GetMatrix(ent, boneName, mode)
-		local finalFlag = UPManip.GET_MATRIX_FLAG.FINAL
+		local finalFlag = UPManip.PROXY_FLAG_GET_MATRIX.FINAL
 		local isFinal = bit.band(mode, finalFlag) == finalFlag
 		if not isFinal then return mat end
 		if not mat then return nil end
@@ -784,8 +804,8 @@ concommand.Add('upmanip_test', function(ply, cmd, args)
 
 		-- 批量插值
 		local resultBatch, runtimeflags = nil
-		if not lerpMode then
-			resultBatch, runtimeflags = initSnapshot:UPMaLerpBoneWorldBatchEasy(
+		if not isLerpLocal then
+			resultBatch, runtimeflags = mossman:UPMaLerpBoneWorldBatchEasy(
 				boneList,
 				math.Clamp(timerCount, 0, 1), 
 				initSnapshot, 
@@ -793,7 +813,7 @@ concommand.Add('upmanip_test', function(ply, cmd, args)
 				proxy
 			)
 		else
-			resultBatch, runtimeflags = initSnapshot:UPMaLerpBoneLocalBatchEasy(
+			resultBatch, runtimeflags = mossman:UPMaLerpBoneLocalBatchEasy(
 				boneList,
 				math.Clamp(timerCount, 0, 1), 
 				initSnapshot, 
@@ -806,7 +826,7 @@ concommand.Add('upmanip_test', function(ply, cmd, args)
 		mossman:UPMaPrintLog(runtimeflags)
 
 		-- 批量控制
-		local runtimeflag = mossman:UPManipBoneBatch(
+		runtimeflags = mossman:UPManipBoneBatch(
 			resultBatch, 
 			boneList, 
 			manipflag,
@@ -814,7 +834,7 @@ concommand.Add('upmanip_test', function(ply, cmd, args)
 		)
 
 		-- 日志
-		mossman:UPMaPrintLog(runtimeflag)
+		mossman:UPMaPrintLog(runtimeflags)
 		
 		timerCount = timerCount + FrameTime()
 	end)
