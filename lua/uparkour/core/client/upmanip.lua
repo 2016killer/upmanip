@@ -385,7 +385,7 @@ UPManip.LERP_SPACE = {
 }
 
 function ENTITY:UPMaGetBoneMatrix(boneName, proxy, mode)
-	if proxy then
+	if proxy and proxy.GetMatrix then
 		return proxy:GetMatrix(self, boneName, mode)
 	else
 		local boneId = self:LookupBone(boneName)
@@ -395,7 +395,7 @@ function ENTITY:UPMaGetBoneMatrix(boneName, proxy, mode)
 end
 
 function ENTITY:UPMaGetParentMatrix(boneName, proxy, mode)
-	if proxy then
+	if proxy and proxy.GetParentMatrix then
 		return proxy:GetParentMatrix(self, boneName, mode)
 	else
 		local boneId = self:LookupBone(boneName)
