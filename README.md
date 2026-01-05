@@ -10,11 +10,11 @@
 
 ### 贡献者
 
-名字: YuRaNnNzZZ
-链接: https://steamcommunity.com/id/yurannnzzz
-贡献: hm500 动画
+名字: YuRaNnNzZZ  
+链接: https://steamcommunity.com/id/yurannnzzz  
+贡献: hm500 动画  
 
-名字: 豆小姐
+名字: 豆小姐  
 贡献: 中文、英文文档   
 
 # UPManip 骨骼操作库 - 中文文档
