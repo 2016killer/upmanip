@@ -78,7 +78,7 @@ function VMRightArmProxy:InitWeaponBoneOffset()
 	end
 end
 
-function VMRightArmProxy:GetMatrix(ent, boneName, mode)
+function VMRightArmProxy:GetMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
 	boneName = boneName == 'WEAPON' and self.WeaponBoneMapping[ent:GetModel()] or boneName
 	return ent:UPMaGetBoneMatrix(boneName)
 end
@@ -90,15 +90,6 @@ end
 
 function VMRightArmProxy:GetLerpSpace(ent, boneName, t, ent1, ent2)
 	return UPManip.LERP_SPACE.LERP_WORLD 
-end
-
-function VMRightArmProxy:AdjustLerpResult(ent, boneName, resultMat, mode)
-	if boneName == 'WEAPON' then
-		local offset = self.WeaponBoneOffset[ent:GetModel()]
-		resultMat = offset and resultMat * offset or resultMat
-		return resultMat
-	end
-	return resultMat
 end
 
 VMRightArmProxy:InitWeaponBoneOffset()
