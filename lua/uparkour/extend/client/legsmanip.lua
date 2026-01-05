@@ -3,18 +3,20 @@
 	2025 1 1
 
 	假的 GmodLegs3 
-	放弃将它作为工具的想法, 已成屎山, 随便写吧...
+	放弃将它作为工具的想法, 随便写吧...
 --]]
 
-
 -- ==============================================================
--- 骨骼映射器
+-- 骨骼代理, 使用静态偏移
 -- ==============================================================
 local zerovec = Vector(0, 0, 0)
 local zeroang = Angle(0, 0, 0)
 local diagonalvec = Vector(1, 1, 1)
+local unitMat = Matrix()
 local emptyTable = {}
-local UsedBones = {
+
+g_ProxyLikeGmodLegs3 = {}
+g_ProxyLikeGmodLegs3.UsedBones = {
 	'ValveBiped.Bip01_Pelvis',
 	'ValveBiped.Bip01_Spine',
 	'ValveBiped.Bip01_Spine1',
@@ -31,65 +33,21 @@ local UsedBones = {
 	'ValveBiped.Bip01_R_Toe0'
 }
 
-local BoneIterator = {}
-for i, v in ipairs(UsedBones) do 
-	table.insert(
-		BoneIterator, 
-		{
-			bone = v, 
-			lerpMethod = UPManip.LERP_METHOD.LOCAL
-		}
-	)
+function g_ProxyLikeGmodLegs3:GetMatrix(ent, boneName, mode)
+	return UPManip.Extend.GetMatrix(ent, boneName, mode)
 end
-UPManip.InitBoneIterator(BoneIterator)
-UsedBones = nil
 
-BoneIterator.GetPlyPelvisLikeGmodLeg3 = function()
-	-- 来自 [Gmod Leg 3] 的位姿计算
-	-- 这是专门配合 [Gmod Leg 3] 的, 离开此场景没什么卵用
-	-- 使用前调用 SetupBones
-
-	if not IsValid(LocalPlayer()) then return nil end
-
-	local ply = LocalPlayer()
-
-	local boneId = ply:LookupBone('ValveBiped.Bip01_Pelvis')
-	if not boneId then return nil end
-	local PelvisMatrix = LocalPlayer():GetBoneMatrix(boneId)
-	if not PelvisMatrix then return nil end
-
-	local IsPlyCrouching = ply:Crouching()
-	local BiaisAngles = sharpeye_focus && sharpeye_focus.GetBiaisViewAngles && sharpeye_focus:GetBiaisViewAngles() || LocalPlayer():EyeAngles()
-	local RadAngle = math.rad(BiaisAngles.y)
-
-	local SysPos = IsPlyCrouching and ply:GetPos() or ply:GetPos() + self.MagicOffset
-	local SysAngle = Angle(0, BiaisAngles.y, 0)
-	
-	SysPos.x = SysPos.x + math.cos(RadAngle) * -22
-	SysPos.y = SysPos.y + math.sin(RadAngle) * -22
-	if ply:GetGroundEntity() == NULL then
-		SysPos.z = SysPos.z + 8
-		if ply:KeyDown(IN_DUCK) then
-			SysPos.z = SysPos.z + -28
-		end
+function g_ProxyLikeGmodLegs3:GetParentMatrix(ent, boneName, mode)
+	-- 父级设为单位矩阵, 这让
+	if boneName == 'SELF' then
+		return unitMat
+	else
+		return UPManip.Extend.GetParentMatrix(ent, boneName, mode)
 	end
-
-
-	local tempAng = LocalPlayer():GetAngles()
-	tempAng.p = 0
-	tempAng.r = 0
-
-	local posl, angl = WorldToLocal(
-		PelvisMatrix:GetTranslation(), 
-		PelvisMatrix:GetAngles(), 
-		LocalPlayer():GetPos(), 
-		tempAng
-	)
-
-	return LocalToWorld(posl, angl, SysPos, SysAngle)
 end
-
-
+-- ==============================================================
+-- 骨骼代理, 使用静态偏移
+-- ==============================================================
 
 if g_ManipLegs and isentity(g_ManipLegs.LegEnt) and IsValid(g_ManipLegs.LegEnt) then
 	g_ManipLegs.LegEnt:Remove()

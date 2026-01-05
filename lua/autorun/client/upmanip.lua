@@ -110,7 +110,7 @@ UPManip.GetBoneFamilyLevel = function(ent)
     assert(isentity(ent) and IsValid(ent), string.format('Invalid ent "%s" (not a entity)', ent))
 
 	if not ent:GetModel() then
-		print('[UPBonesProxy:SortByEnt]: ent no model')
+		print('[UPManip.GetBoneFamilyLevel]: ent no model')
 		return
 	end
 
@@ -130,7 +130,7 @@ UPManip.GetBoneFamilyLevel = function(ent)
     end
 
 	if not family[-1] then
-		print(string.format('[UPBonesProxy:SortByEnt]: ent "%s" no root bone', ent))
+		print(string.format('[UPManip.GetBoneFamilyLevel]: ent "%s" no root bone', ent))
 		return
 	end
 
@@ -348,6 +348,7 @@ local LERP_WORLD = 0x04
 local LERP_LOCAL = 0x08
 local SNAPSHOT = 0x10
 local CUR = 0x20
+local LERP_SKIP = 0x40
 local INIT_LERP_WORLD = bit.bor(INIT, LERP_WORLD)
 local FINAL_LERP_WORLD = bit.bor(FINAL, LERP_WORLD)
 local INIT_LERP_LOCAL = bit.bor(INIT, LERP_LOCAL)
@@ -375,6 +376,12 @@ UPManip.PROXY_FLAG_GET_MATRIX = {
 UPManip.PROXY_FLAG_ADJUST = {
 	LERP_WORLD = LERP_WORLD,
 	LERP_LOCAL = LERP_LOCAL,
+}
+
+UPManip.LERP_SPACE = {
+	LERP_WORLD = LERP_WORLD,
+	LERP_LOCAL = LERP_LOCAL,
+	LERP_SKIP = LERP_SKIP,
 }
 
 function ENTITY:UPMaGetBoneMatrix(boneName, proxy, mode)
@@ -512,8 +519,6 @@ function ENTITY:UPMaLerpBoneLocalBatch(boneList, t, ent1, ent2, proxy1, proxy2, 
 
 	for _, boneName in ipairs(boneList) do
 		local result, flag = self:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy1, proxy2, proxySelf)
-		
-
 		resultBatch[boneName] = result
 		flags[boneName] = flag
 	end
@@ -531,9 +536,41 @@ function ENTITY:UPMaLerpBoneLocalBatchEasy(boneList, t, ent1, ent2, proxy)
 	return self:UPMaLerpBoneLocalBatch(boneList, t, ent1, ent2, proxy, proxy, proxy)
 end
 
+local function __internal_DefaultLerpSpace()
+	return LERP_WORLD
+end
+
+function ENTITY:UPMaFreeLerpBatch(boneList, t, ent1, ent2, proxy)
+	-- 这里可以调整每个骨骼的插值空间
+	assert(istable(proxy) or proxy == nil, 'proxy must be a table or nil')
+	assert(isnumber(t), 't must be a number')
+	assert(istable(boneList), 'boneList must be a table')
+
+	local resultBatch = {}
+	local flags = {}
+	local GetLerpSpace = proxy and proxy.GetLerpSpace or __internal_DefaultLerpSpace
+	
+	for _, boneName in ipairs(boneList) do
+		local lerpSpace = GetLerpSpace(proxy, self, boneName, t, ent1, ent2)
+		local result, flag = nil
+		if lerpSpace == LERP_WORLD then
+			result, flag = self:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy, proxy)
+		elseif lerpSpace == LERP_LOCAL then
+			result, flag = self:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy, proxy, proxy)
+		elseif lerpSpace ~= LERP_SKIP then
+			error('unknown lerp space', lerpSpace)
+		end
+		resultBatch[boneName] = result
+		flags[boneName] = flag
+	end
+
+	return resultBatch, flags
+end
 
 function ENTITY:UPMaPrintLog(runtimeflag, boneName, depth)
+	-- runtimeflag 含部分堆栈信息, 实体本身作为堆信息, 组合起来就可以简单的追踪堆栈
 	-- 不要使用嵌套表, 这里只做了简单防御
+
 	depth = depth or 0
 	if depth > 10 then return end
 
@@ -669,6 +706,19 @@ end
 -- ================================== 默认代理器 ===========================
 -- 这里把根骨骼扩张到实体本身
 -- ================================== 默认代理器 ===========================
+UPManip.ValidateProxy = function(proxy)
+	assert(istable(proxy), 'expect proxy to be a table')
+	assert(isfunction(proxy.GetMatrix) or proxy.GetMatrix == nil, 'invalid field "GetMatrix", expect (function or nil)')
+	assert(isfunction(proxy.GetParentMatrix) or proxy.GetParentMatrix == nil, 'invalid field "GetParentMatrix", expect (function or nil)')
+	assert(isfunction(proxy.AdjustLerpResult) or proxy.AdjustLerpResult == nil, 'invalid field "AdjustLerpResult", expect (function or nil)')
+	assert(isfunction(proxy.SetPosition) or proxy.SetPosition == nil, 'invalid field "SetPosition", expect (function or nil)')
+	assert(isfunction(proxy.SetPos) or proxy.SetPos == nil, 'invalid field "SetPos", expect (function or nil)')
+	assert(isfunction(proxy.SetAng) or proxy.SetAng == nil, 'invalid field "SetAng", expect (function or nil)')
+	assert(isfunction(proxy.SetScale) or proxy.SetScale == nil, 'invalid field "SetScale", expect (function or nil)')
+	assert(isfunction(proxy.GetLerpSpace) or proxy.GetLerpSpace == nil, 'invalid field "GetLerpSpace", expect (function or nil)')
+end
+
+
 UPManip.ExpandSelfProxy = {}
 UPManip.ExpandSelfProxy.Name = '默认玩家骨骼代理'
 
