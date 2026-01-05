@@ -1,7 +1,7 @@
 
 if not GetConVar('developer') or not GetConVar('developer'):GetBool() then return end
 
-local effect = UPEffect:Register('inspect357_demo', 'default', {
+local effect = UPEffect:Register('freeinspect_demo', 'default', {
 	label = '#default', 
 	AAAACreat = '白狼'
 })
@@ -16,9 +16,11 @@ local animEnt = nil
 local animModel = nil
 local finalEnt = nil
 local t = 0
-local timeout = 3
+local timeout = 10
 
-local VMRightArmProxy = {}
+
+UPManip.VMRightArmProxy = UPManip.VMRightArmProxy or {}
+local VMRightArmProxy = UPManip.VMRightArmProxy
 local BoneList = {
 	'WEAPON',
 	'ValveBiped.Bip01_R_UpperArm',
@@ -44,8 +46,40 @@ local BoneList = {
 }
 
 VMRightArmProxy.WeaponBoneMapping = {
-	['models/weapons/c_357.mdl'] = 'Python'
+	['models/weapons/c_357.mdl'] = 'Python',
+	['models/upmanip_demo/yurie_customs/c_hm500.mdl'] = 'j_gun'
 }
+
+-- 你妈比的?
+local temp = Matrix()
+temp:Rotate(Angle(90, 0, 0))
+temp:Rotate(Angle(0, 50, 0))
+temp:Rotate(Angle(0, 0, 20))
+temp:Rotate(Angle(0, 20, 0))
+
+temp:Rotate(Angle(0, 0, -25))
+temp:Rotate(Angle(0, 20, 0))
+temp:Rotate(Angle(10, 0, 0))
+local temp2 = Matrix()
+temp2:SetTranslation(Vector(-0.5, 2, 3.5))
+temp = temp * temp2
+VMRightArmProxy.WeaponBoneOffset = {
+	['models/weapons/c_357.mdl'] = temp, 
+}
+
+function VMRightArmProxy:InitWeaponBoneOffset()
+	for k, v in pairs(self.WeaponBoneOffset) do
+		if ismatrix(v) then continue end
+		assert(istable(v), 'expect table, got', type(v))
+
+		local mat = Matrix()
+		local pos, ang, scale = unpack(v)
+		mat:SetTranslation(pos)
+		mat:SetAngles(ang)
+
+		self.WeaponBoneOffset[k] = mat
+	end
+end
 
 function VMRightArmProxy:GetMatrix(ent, boneName, mode)
 	boneName = boneName == 'WEAPON' and self.WeaponBoneMapping[ent:GetModel()] or boneName
@@ -53,18 +87,24 @@ function VMRightArmProxy:GetMatrix(ent, boneName, mode)
 end
 
 function VMRightArmProxy:SetPosition(ent, boneName, posw, angw)
-	if boneName == 'WEAPON' then
-		print(ent, boneName, posw, angw, mode)
-	end
 	boneName = boneName == 'WEAPON' and self.WeaponBoneMapping[ent:GetModel()] or boneName
-	
 	ent:UPMaSetBonePosition(boneName, posw, angw)
 end
 
-function VMRightArmProxy:GetLerpSpace(ent, boneName, mode)
+function VMRightArmProxy:GetLerpSpace(ent, boneName, t, ent1, ent2)
 	return UPManip.LERP_SPACE.LERP_WORLD 
 end
 
+function VMRightArmProxy:AdjustLerpResult(ent, boneName, resultMat, mode)
+	if boneName == 'WEAPON' then
+		local offset = self.WeaponBoneOffset[ent:GetModel()]
+		resultMat = offset and resultMat * offset or resultMat
+		return resultMat
+	end
+	return resultMat
+end
+
+VMRightArmProxy:InitWeaponBoneOffset()
 
 function effect:Start()
 	local hand = LocalPlayer():GetHands()
@@ -123,7 +163,7 @@ function effect:Start()
 	hand:SetMaterial('Models/effects/vol_light001')
 
 	t = 0
-	UPar.PushFrameLoop('inspect357_demo_eff', 
+	UPar.PushFrameLoop('freeinspect_demo_eff', 
 		function(...)
 			return self:FrameLoop(...)
 		end, nil, 
@@ -136,10 +176,16 @@ function effect:Start()
 end
 
 
-a = a or ClientsideModel('models/weapons/c_357.mdl', RENDERGROUP_OTHER)
-local boneID = a:LookupBone('Python')
-a:ManipulateBonePosition(boneID, Vector(100, 0, 0))
 
+local function DrawCoordinate(mat)
+	if not mat then return end
+	local pos = mat:GetTranslation()
+	local ang = mat:GetAngles()
+
+	render.DrawLine(pos, pos + ang:Forward() * 20, Color(255, 0, 0), false)
+	render.DrawLine(pos, pos + ang:Right() * 20, Color(0, 255, 0), false)
+	render.DrawLine(pos, pos + ang:Up() * 20, Color(0, 0, 255), false)
+end
 
 function effect:FrameLoop(dt, cur, additive)
 	local vm = LocalPlayer():GetViewModel()
@@ -149,24 +195,23 @@ function effect:FrameLoop(dt, cur, additive)
 		return true
 	end
 
-	local newCycle = finalEnt:GetCycle() + dt
-
-	finalEnt:SetCycle(newCycle)
-	if newCycle > 1 then
-		return true
-	end
-
-	finalEnt:SetPos(vm:LocalToWorld(Vector(20, 0, 0)))
+	finalEnt:SetPos(vm:LocalToWorld(Vector(10, 0, 0)))
 	finalEnt:SetAngles(vm:GetAngles())
 	finalEnt:SetupBones()
 
-	vm:SetupBones()
-	
 	animEnt:SetPos(vm:GetPos())
 	animEnt:SetAngles(vm:GetAngles())
 	animEnt:SetupBones()
+	
+	vm:SetupBones()
 
-	t = math.Clamp(t + dt * 5, 0, 1)
+	local newCycle = finalEnt:GetCycle() + dt * 0.25
+	finalEnt:SetCycle(newCycle)
+	if newCycle > 0.8 then
+		t = math.Clamp(t - dt * 5, 0, 1)
+	else
+		t = math.Clamp(t + dt * 5, 0, 1)
+	end
 
 	local resultBatch, runtimeflags = animEnt:UPMaFreeLerpBatch(
 		BoneList, 
@@ -175,7 +220,7 @@ function effect:FrameLoop(dt, cur, additive)
 		finalEnt, 
 		VMRightArmProxy
 	)
-	vm:UPMaPrintLog(runtimeflags)
+	// vm:UPMaPrintLog(runtimeflags)
 
 	runtimeflags = animEnt:UPManipBoneBatch(
 		resultBatch, 
@@ -187,6 +232,7 @@ function effect:FrameLoop(dt, cur, additive)
 
 	animModel:DrawModel()
 	animEnt:DrawModel()
+	DrawCoordinate(VMRightArmProxy:GetMatrix(animEnt, 'WEAPON'))
 end
 
 function effect:FrameLoopClear(_, _, _,reason)
@@ -201,11 +247,11 @@ function effect:FrameLoopClear(_, _, _,reason)
 	local vm = LocalPlayer():GetViewModel()
 	if IsValid(vm) then vm:SetMaterial('') end
 
-	print('clear inspect357_demo_eff', reason)
+	print('clear freeinspect_demo_eff', reason)
 end
 
 function effect:Clear()
-	UPar.PopFrameLoop('inspect357_demo_eff')
+	UPar.PopFrameLoop('freeinspect_demo_eff')
 end
 
 concommand.Add('upmanip_vm_bone', function(ply, cmd, args)

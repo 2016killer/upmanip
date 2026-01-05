@@ -31,6 +31,12 @@
 
 --]]
 
+if SERVER then 
+	AddCSLuaFile()
+	return
+end
+
+
 local zero = 1e-4
 
 UPManip = UPManip or {}
@@ -406,7 +412,7 @@ function ENTITY:UPMaGetParentMatrix(boneName, proxy, mode)
 	end
 end
 
-function ENTITY:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy1, proxy2)
+function ENTITY:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy1, proxy2, proxySelf)
 	-- 实际上 ent1、ent2 的类型不一定要是实体, 也可以是 UPSnapshot
 	-- 一般在 UPMaLerpBoneWorldBatch 中调用, 所以不作验证
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
@@ -481,13 +487,14 @@ function ENTITY:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy1, proxy2, proxy
 	return result, SUCC_FLAG
 end
 
-function ENTITY:UPMaLerpBoneWorldBatch(boneList, t, ent1, ent2, proxy1, proxy2)
+function ENTITY:UPMaLerpBoneWorldBatch(boneList, t, ent1, ent2, proxy1, proxy2, proxySelf)
 	-- 一般在帧循环中调用, 所以不作太多验证
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
 	assert(istable(proxy1) or proxy1 == nil, 'proxy1 must be a table or nil')
 	assert(istable(proxy2) or proxy2 == nil, 'proxy2 must be a table or nil')
+	assert(istable(proxySelf) or proxySelf == nil, 'proxySelf must be a table or nil')
 	assert(isnumber(t), 't must be a number')
 	assert(istable(boneList), 'boneList must be a table')
 
@@ -495,7 +502,7 @@ function ENTITY:UPMaLerpBoneWorldBatch(boneList, t, ent1, ent2, proxy1, proxy2)
 	local flags = {}
 
 	for _, boneName in ipairs(boneList) do
-		local result, flag = self:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy1, proxy2)
+		local result, flag = self:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy1, proxy2, proxySelf)
 		resultBatch[boneName] = result
 		flags[boneName] = flag
 	end
@@ -528,7 +535,7 @@ end
 
 function ENTITY:UPMaLerpBoneWorldBatchEasy(boneList, t, ent1, ent2, proxy)
 	-- 使用同一个代理器
-	return self:UPMaLerpBoneWorldBatch(boneList, t, ent1, ent2, proxy, proxy)
+	return self:UPMaLerpBoneWorldBatch(boneList, t, ent1, ent2, proxy, proxy, proxy)
 end
 
 function ENTITY:UPMaLerpBoneLocalBatchEasy(boneList, t, ent1, ent2, proxy)
@@ -554,7 +561,7 @@ function ENTITY:UPMaFreeLerpBatch(boneList, t, ent1, ent2, proxy)
 		local lerpSpace = GetLerpSpace(proxy, self, boneName, t, ent1, ent2)
 		local result, flag = nil
 		if lerpSpace == LERP_WORLD then
-			result, flag = self:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy, proxy)
+			result, flag = self:UPMaLerpBoneWorld(boneName, t, ent1, ent2, proxy, proxy, proxy)
 		elseif lerpSpace == LERP_LOCAL then
 			result, flag = self:UPMaLerpBoneLocal(boneName, t, ent1, ent2, proxy, proxy, proxy)
 		elseif lerpSpace ~= LERP_SKIP then
