@@ -124,9 +124,6 @@ ManipLegs.FRAME_LOOP_HOOK = {
 	}
 }
 
-ManipLegs.MagicOffset = Vector(0, 0, 5)
-ManipLegs.MagicOffsetZ0 = 
-ManipLegs.MagicOffsetZ1 = 
 ManipLegs.LerpT = 0
 ManipLegs.FadeInSpeed = 10
 ManipLegs.FadeOutSpeed = 5

@@ -1,3 +1,5 @@
+if not GetConVar('developer') or not GetConVar('developer'):GetBool() then return end
+
 local inspect357_demo = UPAction:Register('inspect357_demo', {
 	AAAACreat = '白狼',
 	AAADesc = '#inspect357_demo.desc',

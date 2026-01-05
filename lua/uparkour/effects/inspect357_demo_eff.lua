@@ -12,12 +12,14 @@ if SERVER then
 	return 
 end
 
+local animEnt = nil
+local animModel = nil
 local finalEnt = nil
 local t = 0
 local timeout = 3
 
 local VMRightArmProxy = {}
-VMRightArmProxy.BoneList={
+local BoneList = {
 	'WEAPON',
 	'ValveBiped.Bip01_R_UpperArm',
 	'ValveBiped.Bip01_R_Forearm',
@@ -50,33 +52,77 @@ function VMRightArmProxy:GetMatrix(ent, boneName, mode)
 	return ent:UPMaGetBoneMatrix(boneName)
 end
 
+function VMRightArmProxy:SetPosition(ent, boneName, posw, angw)
+	if boneName == 'WEAPON' then
+		print(ent, boneName, posw, angw, mode)
+	end
+	boneName = boneName == 'WEAPON' and self.WeaponBoneMapping[ent:GetModel()] or boneName
+	
+	ent:UPMaSetBonePosition(boneName, posw, angw)
+end
+
 function VMRightArmProxy:GetLerpSpace(ent, boneName, mode)
 	return UPManip.LERP_SPACE.LERP_WORLD 
 end
 
 
 function effect:Start()
+	local hand = LocalPlayer():GetHands()
+	if not IsValid(hand) or not hand:GetModel() then
+		print('no hand or hand model')
+		return
+	end
+
+	local vm = LocalPlayer():GetViewModel()
+	if not IsValid(vm) or not vm:GetModel() then
+		print('no vm or vm model')
+		return
+	end
+
 	if not IsValid(finalEnt) then
 		finalEnt = ClientsideModel('models/upmanip_demo/yurie_customs/c_hm500.mdl', RENDERGROUP_OTHER)
 	end
 	
-	local vm = LocalPlayer():GetViewModel()
-	if not IsValid(vm) then
-		print('no vm')
-		return
+	if not IsValid(animEnt) then
+		animEnt = ClientsideModel(vm:GetModel(), RENDERGROUP_OTHER)
 	end
-	vm:SetupBones()
 
-	
+	if not IsValid(animModel) then
+		animModel = ClientsideModel(hand:GetModel(), RENDERGROUP_OTHER)
+	end
+
 	local seqId = finalEnt:LookupSequence('inspect')
 	finalEnt:ResetSequenceInfo()
 	finalEnt:ResetSequence(seqId)
 	finalEnt:SetPlaybackRate(1)
 	finalEnt:SetCycle(0)
 	finalEnt:SetParent(vm)
+	finalEnt:SetNoDraw(true)
+
+	animEnt:SetParent(vm)
+	animEnt:SetNoDraw(true)
+	
+	animModel:SetParent(animEnt)
+	animModel:AddEffects(EF_BONEMERGE)
+	animModel:SetNoDraw(true)
+
+	for k, v in pairs(hand:GetBodyGroups()) do
+		local current = hand:GetBodygroup(v.id)
+		animModel:SetBodygroup(v.id,  current)
+	end
+
+	for k, v in ipairs(hand:GetMaterials()) do
+		animModel:SetSubMaterial(k - 1, hand:GetSubMaterial(k - 1))
+	end
+
+	animModel:SetSkin(hand:GetSkin())
+	animModel:SetMaterial(hand:GetMaterial())
+	animModel:SetColor(hand:GetColor())
+
+	vm:SetMaterial('Models/effects/vol_light001')
+	hand:SetMaterial('Models/effects/vol_light001')
 
 	t = 0
-
 	UPar.PushFrameLoop('inspect357_demo_eff', 
 		function(...)
 			return self:FrameLoop(...)
@@ -84,16 +130,22 @@ function effect:Start()
 		timeout, 
 		function(...)
 			return self:FrameLoopClear(...)
-		end
+		end,
+		'PostDrawViewModel'
 	)
 end
+
+
+a = a or ClientsideModel('models/weapons/c_357.mdl', RENDERGROUP_OTHER)
+local boneID = a:LookupBone('Python')
+a:ManipulateBonePosition(boneID, Vector(100, 0, 0))
 
 
 function effect:FrameLoop(dt, cur, additive)
 	local vm = LocalPlayer():GetViewModel()
 
-	if not IsValid(finalEnt) or not IsValid(vm) then
-		print('no vm or finalEnt')
+	if not IsValid(finalEnt) or not IsValid(animEnt) or not IsValid(animModel) or not IsValid(vm) then
+		print('no vm or finalEnt or animEnt or animModel')
 		return true
 	end
 
@@ -109,30 +161,46 @@ function effect:FrameLoop(dt, cur, additive)
 	finalEnt:SetupBones()
 
 	vm:SetupBones()
+	
+	animEnt:SetPos(vm:GetPos())
+	animEnt:SetAngles(vm:GetAngles())
+	animEnt:SetupBones()
 
 	t = math.Clamp(t + dt * 5, 0, 1)
-	additive.t = t
 
-	local resultBatch, runtimeflags = vm:UPMaFreeLerpBatch(
-		VMRightArmProxy.BoneList, 
+	local resultBatch, runtimeflags = animEnt:UPMaFreeLerpBatch(
+		BoneList, 
 		t, 
 		vm, 
 		finalEnt, 
 		VMRightArmProxy
 	)
-	// vm:UPMaPrintLog(runtimeflags)
+	vm:UPMaPrintLog(runtimeflags)
 
-	runtimeflags = vm:UPManipBoneBatch(
+	runtimeflags = animEnt:UPManipBoneBatch(
 		resultBatch, 
-		VMRightArmProxy.BoneList, 
+		BoneList, 
 		UPManip.MANIP_FLAG.MANIP_POSITION,
 		VMRightArmProxy
 	)
 	// vm:UPMaPrintLog(runtimeflags)
+
+	animModel:DrawModel()
+	animEnt:DrawModel()
 end
 
-effect.FrameLoopClear = function(_, _, _, reason)
+function effect:FrameLoopClear(_, _, _,reason)
+	if reason == 'OVERRIDE' then return end
+
 	if IsValid(finalEnt) then finalEnt:Remove() end
+	if IsValid(animEnt) then animEnt:Remove() end
+
+	local hand = LocalPlayer():GetHands()
+	if IsValid(hand) then hand:SetMaterial('') end
+
+	local vm = LocalPlayer():GetViewModel()
+	if IsValid(vm) then vm:SetMaterial('') end
+
 	print('clear inspect357_demo_eff', reason)
 end
 
