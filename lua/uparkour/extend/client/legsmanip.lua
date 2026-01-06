@@ -37,28 +37,29 @@ local BoneList = {
 	'ValveBiped.Bip01_R_Toe0'
 }
 
-GmodLegs3ToVMLegsProxyDemo.BoneSelfOffset = -22
+GmodLegs3ToVMLegsProxyDemo.BoneSelfOffset = 0
 
 function GmodLegs3ToVMLegsProxyDemo:GetMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
-	if boneName == 'SELF' and ent == LocalPlayer() then
-		local mat = ent:GetWorldTransformMatrix()
-		if not mat then return nil end
-		local eyeVec = LocalPlayer():GetAimVector()
-		eyeVec.z = 0
-		eyeVec:Normalize()
-		mat:SetTranslation(mat:GetTranslation() + eyeVec * self.BoneSelfOffset)
+	// if boneName == 'SELF' and ent == LocalPlayer() then
+	// 	local mat = ent:GetWorldTransformMatrix()
+	// 	if not mat then return nil end
+	// 	local eyeVec = LocalPlayer():GetAimVector()
+	// 	eyeVec.z = 0
+	// 	eyeVec:Normalize()
+	// 	mat:SetTranslation(mat:GetTranslation() + eyeVec * self.BoneSelfOffset)
 
-		return mat
-	else
-		return ent:UPMaGetBoneMatrix(boneName)
-	end
+	// 	return mat
+	// else
+	// 	return ent:UPMaGetBoneMatrix(boneName)
+	// end
+	return UPManip.ExpandSelfProxy:GetMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
 end
 
 function GmodLegs3ToVMLegsProxyDemo:GetParentMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
 	return UPManip.ExpandSelfProxy:GetParentMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
 end
 
-function UPManip.ExpandSelfProxy:SetPosition(ent, boneName, posw, angw)
+function GmodLegs3ToVMLegsProxyDemo:SetPosition(ent, boneName, posw, angw)
 	return UPManip.ExpandSelfProxy:SetPosition(ent, boneName, posw, angw)
 end
 
@@ -112,6 +113,7 @@ ManipLegs.FRAME_LOOP = {
 
 			local frameStartSleep = hook.Run('UPExtLegsManipFrameContextStart', self) or self:FrameContextStartCheck()
 			if frameStartSleep then
+				// print('frameStartSleep')
 				self:Sleep()
 				return
 			end
@@ -120,6 +122,7 @@ ManipLegs.FRAME_LOOP = {
 	
 			local frameEndSleep = hook.Run('UPExtLegsManipFrameContextEnd', self) or self:FrameContextEndCheck()
 			if frameEndSleep then
+				// print('frameEndSleep')
 				self:Sleep()
 				return
 			end
@@ -129,6 +132,7 @@ ManipLegs.FRAME_LOOP = {
 	{
 		eventName = 'ShouldDisableLegs',
 		identity = 'DisableGmodLegs3',
+		timeout = 20,
 		iterator = function(self, ...)
 			return true
 		end
@@ -136,14 +140,13 @@ ManipLegs.FRAME_LOOP = {
 }
 
 ManipLegs.t = 0
-ManipLegs.FadeInSpeed = 10
+ManipLegs.FadeInSpeed = 5
 ManipLegs.FadeOutSpeed = 5
 ManipLegs.Proxy = nil
-ManipLegs.Snapshot = UPSnapshot:New()
-
+ManipLegs.Snapshot = UPSnapshot:New(nil, nil, nil, true, true)
 
 function ManipLegs:FrameContextStartCheck()
-	return not IsValid(LocalPlayer()) or not LocalPlayer:Alive() or not IsValid(self.LegEnt)
+	return not IsValid(LocalPlayer()) or not LocalPlayer():Alive() or not IsValid(self.LegEnt)
 end
 
 function ManipLegs:FrameContextEndCheck()
@@ -151,39 +154,44 @@ function ManipLegs:FrameContextEndCheck()
 end
 
 function ManipLegs:UpdateAnimation(dt)
+	local debug = GetConVar('developer') and GetConVar('developer'):GetBool()
+
 	self.LegEnt:SetupBones()
 	LocalPlayer():SetupBones()
 
 	if IsValid(self.FinalEnt) then
 		self.FinalEnt:SetupBones()
-		self.t = math.Clamp(self.t + math.abs(self.FadeInSpeed) * dt, 0, 1)
+		self.t = math.Clamp(self.t + math.abs(self.FadeInSpeed) * dt, 0, 1)	
 	else
 		self.FinalEnt = nil
 		self.t = math.Clamp(self.t - math.abs(self.FadeOutSpeed) * dt, 0, 1)
 	end
 
 	local resultBatch, runtimeflags = self.LegEnt:UPMaFreeLerpBatch(
-		BoneList
+		BoneList,
 		self.t,
 		LocalPlayer(),
 		self.FinalEnt or self.Snapshot or self.LegEnt,
-		GmodLegs3ToVMLegsProxyDemo
+		self.Proxy
 	)
 	self.Snapshot.MatTbl = resultBatch
-	// if debug then vm:UPMaPrintLog(runtimeflags) end
+	// if debug then self.LegEnt:UPMaPrintLog(runtimeflags) end
+	// PrintTable(resultBatch)
 
-	local runtimeflag = self.LegEnt:UPManipBoneBatch(
+	runtimeflags = self.LegEnt:UPManipBoneBatch(
 		resultBatch,
 		BoneList,
 		UPManip.MANIP_FLAG.MANIP_POSITION,
-		GmodLegs3ToVMLegsProxyDemo
+		self.Proxy
 	)
-	// if debug then vm:UPMaPrintLog(runtimeflags) end
+	if debug then self.LegEnt:UPMaPrintLog(runtimeflags) end
+
+	self.LegEnt:DrawModel()
 end
 
 function ManipLegs:PushFrameLoop()
 	for _, v in ipairs(self.FRAME_LOOP) do
-		UPar.PushFrameLoop(v.identity, v.iterator, self, v.clear, v.timeout)
+		UPar.PushFrameLoop(v.identity, v.iterator, self, v.timeout, v.clear, v.eventName)
 	end
 	
 	return true
@@ -267,7 +275,6 @@ function ManipLegs:Wake()
 		return false
 	end
 
-	self.LegEnt:SetParent(LocalPlayer())
 	self.LegEnt:SetNoDraw(false)
 	self.IsWake = true
 
@@ -284,7 +291,6 @@ function ManipLegs:Sleep()
 		return false
 	end
 
-	self.LegEnt:SetParent(nil)
 	self.LegEnt:SetNoDraw(true)
 	self.IsWake = false
 
@@ -320,7 +326,13 @@ ManipLegs.VMLegs_LISTENER = {
 			self.FadeOutSpeed = animData.lerp_speed_out or 5
 			self.FadeInCycle = (animData.startcycle or 0)
 			self.FadeOutCycle = (animData.endcycle or 1)
- 
+			self.FinalEnt = VMLegs.LegParent
+			self.Proxy = GmodLegs3ToVMLegsProxyDemo
+			self.t = 0
+			
+			self:Wake()
+			
+			// self.LegEnt:SetParent(LocalPlayer())
 		end
 	}
 }
@@ -364,14 +376,12 @@ hook.Add('KeyPress', 'UPExtLegsManip', function()
 	temp_changecall(nil, nil, upext_legsmanip_vmlegs:GetBool() and '1' or '0')
 	temp_changecall = nil
 end)
-
 -- ==============================================================
 -- 菜单
 -- ==============================================================
 UPar.SeqHookAdd('UParExtendMenu', 'LegsManip', function(panel)
 	panel:Help('·························· 腿部控制器 ··························')
 	panel:CheckBox('#upext.legsmanip', 'upext_legsmanip_vmlegs')
-	panel:ControlHelp('#upext.legsmanip.help')
-	local help2 = panel:ControlHelp('#upext.legsmanip.help2')
-	help2:SetTextColor(Color(255, 170, 0))
+	local help = panel:ControlHelp('#upext.legsmanip.help')
+	help:SetTextColor(Color(255, 170, 0))
 end, 1)

@@ -32,16 +32,44 @@ local effect = UPEffect:Register('hl2inspect_demo', 'default', {
 })
 
 if SERVER then 
+	hook.Add('PlayerSwitchWeapon', 'hl2inspect_demo', function(ply)
+		if IsValid(ply) and ply:IsPlayer() then
+			ply:SendLua('RunConsoleCommand("upmanip_hl2inspect_demo_clear")')
+		end
+	end)
+
 	effect.Start = UPar.emptyfunc
 	effect.End = UPar.emptyfunc
 	return 
 end
 
+local function temp_interrupt()
+	UPar.CallPlyUsingEff('hl2inspect_demo', 'Clear', LocalPlayer())
+end
+
+concommand.Add('upmanip_hl2inspect_demo_clear', temp_interrupt)
+
+hook.Add('KeyPress', 'hl2inspect_demo_interrupt', function(ply, key)
+	if ply ~= LocalPlayer() then
+		return
+	end
+
+	if key == IN_RELOAD or key == IN_ATTACK then
+		temp_interrupt()
+	end
+end)
+
+local function temp_start()
+	UPar.CallPlyUsingEff('hl2inspect_demo', 'Start', LocalPlayer())
+end
+
+concommand.Add('upmanip_hl2inspect_demo_start', temp_start)
+
 UPKeyboard.Register('hl2inspect_demo', '[]')
 UPar.SeqHookAdd('UParKeyPress', 'hl2inspect_demo', function(eventflags)
 	if eventflags['hl2inspect_demo'] then
 		eventflags['hl2inspect_demo'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
-		UPar.CallPlyUsingEff('hl2inspect_demo', 'Start', LocalPlayer())
+		temp_start()
 	end
 end)
 -- =====================================================  
@@ -226,7 +254,7 @@ local startCycle = 0
 local endCycle = 0.8
 // local startCycle = 0.78
 // local endCycle = 2
-local firstTime = true
+local renderT = 0.01
 
 
 function effect:Start()
@@ -292,7 +320,6 @@ function effect:Start()
 
 	t = 0
 	isFadeIn = true
-	firstTime = true
 	UPar.PushFrameLoop('hl2inspect_demo_eff', 
 		function(...)
 			return self:FrameLoop(...)
@@ -304,8 +331,7 @@ function effect:Start()
 		'PreDrawViewModel'
 	)
 	hook.Add('PreDrawViewModel', 'hl2inspect_demo_eff', function()
-		-- 这里不能写成 return not firstTime, 因为这是钩子
-		if firstTime then return end
+		if t < renderT then return end
 		return true
 	end)
 end
@@ -393,10 +419,7 @@ function effect:FrameLoop(dt, cur, additive)
 		) 
 	end
 
-	if firstTime then
-		firstTime = false
-		return
-	end
+	if t <= renderT then return end
 
 	animModel:DrawModel()
 	animEnt:DrawModel()

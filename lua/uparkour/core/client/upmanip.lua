@@ -608,7 +608,7 @@ UPSnapshot.DebugBoxColorWorld = Color(0, 255, 0)
 function UPSnapshot:New(ent, boneList, proxy, withLocal, drawDebug)
 	-- 需要在外部调用 ent:SetupBones()
 	assert((isentity(ent) and ent:IsValid() and ent:GetModel()) or ent == nil, 'expect ent to be a valid entity with model or nil')
-	assert(istable(boneList), 'expect boneList to be a table')
+	assert(istable(boneList) or boneList == nil, 'expect boneList to be a table or nil')
 	assert(istable(proxy) or proxy == nil, 'expect proxy to be a table or nil')
 
     local self = setmetatable({}, UPSnapshot)
@@ -618,7 +618,8 @@ function UPSnapshot:New(ent, boneList, proxy, withLocal, drawDebug)
 	self.Model = ent and ent:GetModel() or 'error'
 
 	if not ent then return self end
-
+	if not boneList then return self end
+	
 	for _, boneName in ipairs(boneList) do
 		assert(isstring(boneName), 'expect boneName to be a string')
 		self.MatTbl[boneName] = ent:UPMaGetBoneMatrix(boneName, proxy, SNAPSHOT)
