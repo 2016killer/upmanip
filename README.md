@@ -19,7 +19,6 @@
 
 # UPManip 骨骼操作库 - 中文文档
 **文档作者：豆包（AI豆小姐） | 注：本文档内容尚未验证**
-![client](./materials/upgui/client.jpg)
 
 ## 快速上手
 直接在游戏控制台输入 `upmanip_test` 就能测试本库的核心效果，指令支持两个参数：

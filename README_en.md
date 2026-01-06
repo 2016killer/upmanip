@@ -20,7 +20,6 @@ Contribution: Chinese and English documentation
 
 # UPManip Bone Manipulation Library - English Documentation
 **Doc Author: Doubao (AI Douxiaojie) | Note: Documentation content unvalidated**
-![client](./materials/upgui/client.jpg)
 
 ## Quick Start
 Test the core functionality directly by entering `upmanip_test` in the game console. The command supports two parameters:

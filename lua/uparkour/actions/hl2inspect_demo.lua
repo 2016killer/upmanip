@@ -1,37 +1,27 @@
-local freeinspect_demo = UPAction:Register('freeinspect_demo', {
+local hl2inspect_demo = UPAction:Register('hl2inspect_demo', {
 	AAAACreat = '白狼',
-	AAADesc = '#freeinspect_demo.desc',
-	icon = 'upgui/uparkour.jpg',
-	label = '#freeinspect_demo',
+	AAADesc = '#hl2inspect_demo.desc',
+	label = '#hl2inspect_demo',
 	defaultDisabled = false
 })
 
-if SERVER then return end
-
-UPKeyboard.Register('freeinspect_demo', '[]')
-
-UPar.SeqHookAdd('UParKeyPress', 'freeinspect_demo', function(eventflags)
-	if eventflags['freeinspect_demo'] then
-		eventflags['freeinspect_demo'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
-		UPar.CallPlyUsingEff('freeinspect_demo', 'Start', LocalPlayer())
-	end
-end)
-
-
-
-local effect = UPEffect:Register('freeinspect_demo', 'default', {
+local effect = UPEffect:Register('hl2inspect_demo', 'default', {
 	label = '#default', 
 	AAAACreat = '白狼'
 })
 
-if SERVER then return end
+if SERVER then 
+	effect.Start = UPar.emptyfunc
+	effect.End = UPar.emptyfunc
+	return 
+end
 
-UPKeyboard.Register('freeinspect_demo', '[]')
+UPKeyboard.Register('hl2inspect_demo', '[]')
 
-UPar.SeqHookAdd('UParKeyPress', 'freeinspect_demo', function(eventflags)
-	if eventflags['freeinspect_demo'] then
-		eventflags['freeinspect_demo'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
-		UPar.CallPlyUsingEff('freeinspect_demo', 'Start', LocalPlayer())
+UPar.SeqHookAdd('UParKeyPress', 'hl2inspect_demo', function(eventflags)
+	if eventflags['hl2inspect_demo'] then
+		eventflags['hl2inspect_demo'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
+		UPar.CallPlyUsingEff('hl2inspect_demo', 'Start', LocalPlayer())
 	end
 end)
 
@@ -74,22 +64,23 @@ VMRightArmProxy.WeaponBoneMapping = {
 }
 
 -- 你妈比的?
-local temp = Matrix()
-temp:Rotate(Angle(90, 0, 0))
-temp:Rotate(Angle(0, 50, 0))
-temp:Rotate(Angle(0, 0, 20))
-temp:Rotate(Angle(0, 20, 0))
+// local temp = Matrix()
+// temp:Rotate(Angle(90, 0, 0))
+// temp:Rotate(Angle(0, 50, 0))
+// temp:Rotate(Angle(0, 0, 20))
+// temp:Rotate(Angle(0, 20, 0))
 
-temp:Rotate(Angle(0, 0, -25))
-temp:Rotate(Angle(0, 20, 0))
-temp:Rotate(Angle(10, 0, 0))
-local temp2 = Matrix()
-temp2:SetTranslation(Vector(-0.5, 2, 3.5))
-temp = temp * temp2
-print(temp:GetTranslation())
-print(temp:GetAngles())
+// temp:Rotate(Angle(0, 0, -25))
+// temp:Rotate(Angle(0, 20, 0))
+// temp:Rotate(Angle(10, 0, 0))
+// local temp2 = Matrix()
+// temp2:SetTranslation(Vector(-0.5, 2, 3.5))
+// temp = temp * temp2
 VMRightArmProxy.WeaponBoneOffset = {
-	['models/weapons/c_357.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = temp
+	['models/weapons/c_357.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = {
+		Vector(3.218955, -0.071265, 2.476537),
+		Angle(2.566, 95.680, 82.198)
+	}
 }
 
 function VMRightArmProxy:InitWeaponBoneOffset()
@@ -98,7 +89,7 @@ function VMRightArmProxy:InitWeaponBoneOffset()
 		assert(istable(v), 'expect table, got', type(v))
 
 		local mat = Matrix()
-		local pos, ang, scale = unpack(v)
+		local pos, ang = unpack(v)
 		mat:SetTranslation(pos)
 		mat:SetAngles(ang)
 
@@ -189,7 +180,7 @@ function effect:Start()
 	hand:SetMaterial('Models/effects/vol_light001')
 
 	t = 0
-	UPar.PushFrameLoop('freeinspect_demo_eff', 
+	UPar.PushFrameLoop('hl2inspect_demo_eff', 
 		function(...)
 			return self:FrameLoop(...)
 		end, nil, 
@@ -273,11 +264,11 @@ function effect:FrameLoopClear(_, _, _,reason)
 	local vm = LocalPlayer():GetViewModel()
 	if IsValid(vm) then vm:SetMaterial('') end
 
-	print('clear freeinspect_demo_eff', reason)
+	print('clear hl2inspect_demo_eff', reason)
 end
 
 function effect:Clear()
-	UPar.PopFrameLoop('freeinspect_demo_eff')
+	UPar.PopFrameLoop('hl2inspect_demo_eff')
 end
 
 concommand.Add('upmanip_vm_bone', function(ply, cmd, args)
