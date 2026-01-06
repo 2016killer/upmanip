@@ -141,11 +141,11 @@ ArmProxyDemo.BoneWeaponMapping = {
 
 -- 你妈比的?
 // local temp = Matrix()
-// temp:Rotate(Angle(0, 0, 90))
-// temp:Rotate(Angle(90, 0, 0))
-// temp:Rotate(Angle(0, 0, 0))
+// temp:SetTranslation(Vector(1.999999, -0.000000, 3.249999))
+// temp:SetAngles(Angle(-0.000, 90.000, 90.000))
+// temp:Rotate(Angle(0, 0, 25))
 // local temp2 = Matrix()
-// temp2:SetTranslation(Vector(0.5, 8, -10))
+// temp2:SetTranslation(Vector(0, 0, 0.5))
 // temp = temp * temp2
 // print(temp:GetTranslation())
 // print(temp:GetAngles())
@@ -182,8 +182,8 @@ ArmProxyDemo.BoneWeaponOffset = {
 		Angle(-0.000, 90.000, 90.000)
 	},
 	['models/weapons/c_smg1.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = {
-		Vector(1.999999, -0.000000, 3.249999),
-		Angle(-0.000, 90.000, 90.000)
+		Vector(2.453153, 0.000000, 3.038690),
+		Angle(-0.000, 90.000, 115.000)
 	},
 	['models/weapons/c_rpg.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = {
 		Vector(-9.999997, 0.499998, 7.999998),
@@ -372,7 +372,7 @@ function effect:FrameLoop(dt, cur, additive)
 		return true
 	end
 
-	finalEnt:SetPos(vm:LocalToWorld(Vector(10, 0, 0)))
+	finalEnt:SetPos(vm:LocalToWorld(Vector(7, 0, 0)))
 	finalEnt:SetAngles(vm:GetAngles())
 	finalEnt:SetupBones()
 

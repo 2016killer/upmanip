@@ -19,54 +19,29 @@ local emptyTable = {}
 UPManip.GmodLegs3ToVMLegsProxyDemo = {}
 
 local GmodLegs3ToVMLegsProxyDemo = UPManip.GmodLegs3ToVMLegsProxyDemo
-local BoneList = {
-	'SELF',
-	'ValveBiped.Bip01_Pelvis',
-	'ValveBiped.Bip01_Spine',
-	'ValveBiped.Bip01_Spine1',
-	'ValveBiped.Bip01_Spine2',
-
-	'ValveBiped.Bip01_L_Thigh',
-	'ValveBiped.Bip01_L_Calf',
-	'ValveBiped.Bip01_L_Foot',
-	'ValveBiped.Bip01_L_Toe0',
-
-	'ValveBiped.Bip01_R_Thigh',
-	'ValveBiped.Bip01_R_Calf',
-	'ValveBiped.Bip01_R_Foot',
-	'ValveBiped.Bip01_R_Toe0'
-}
-
-GmodLegs3ToVMLegsProxyDemo.BoneSelfOffset = 0
+GmodLegs3ToVMLegsProxyDemo.PlyPelvisOffset = -22
 
 function GmodLegs3ToVMLegsProxyDemo:GetMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
-	// if boneName == 'SELF' and ent == LocalPlayer() then
-	// 	local mat = ent:GetWorldTransformMatrix()
-	// 	if not mat then return nil end
-	// 	local eyeVec = LocalPlayer():GetAimVector()
-	// 	eyeVec.z = 0
-	// 	eyeVec:Normalize()
-	// 	mat:SetTranslation(mat:GetTranslation() + eyeVec * self.BoneSelfOffset)
+	if boneName == 'ValveBiped.Bip01_Pelvis' and ent == LocalPlayer() then
+		local mat = ent:UPMaGetBoneMatrix(boneName)
+		if not mat then return nil end
+		local pos = mat:GetTranslation()
+		local offsetDir = LocalPlayer():GetAimVector()
+		offsetDir.z = 0
+		offsetDir:Normalize()
+		pos = pos + offsetDir * self.PlyPelvisOffset
+		mat:SetTranslation(pos)
 
-	// 	return mat
-	// else
-	// 	return ent:UPMaGetBoneMatrix(boneName)
-	// end
-	return UPManip.ExpandSelfProxy:GetMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
-end
-
-function GmodLegs3ToVMLegsProxyDemo:GetParentMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
-	return UPManip.ExpandSelfProxy:GetParentMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
-end
-
-function GmodLegs3ToVMLegsProxyDemo:SetPosition(ent, boneName, posw, angw)
-	return UPManip.ExpandSelfProxy:SetPosition(ent, boneName, posw, angw)
+		return mat
+	else
+		return ent:UPMaGetBoneMatrix(boneName)
+	end
 end
 
 function GmodLegs3ToVMLegsProxyDemo:GetLerpSpace(ent, boneName, t, ent1, ent2)
-	if boneName == 'SELF' then 
+	if boneName == 'ValveBiped.Bip01_Pelvis' then
 		return UPManip.LERP_SPACE.LERP_WORLD
-	else	
+	else
 		return UPManip.LERP_SPACE.LERP_LOCAL
 	end
 end
@@ -84,18 +59,37 @@ g_ManipLegs = {}
 
 local ManipLegs = g_ManipLegs
 
+ManipLegs.BoneList = {
+	'ValveBiped.Bip01_Pelvis',
+	'ValveBiped.Bip01_Spine',
+	'ValveBiped.Bip01_Spine1',
+	'ValveBiped.Bip01_Spine2',
+
+	'ValveBiped.Bip01_L_Thigh',
+	'ValveBiped.Bip01_L_Calf',
+	'ValveBiped.Bip01_L_Foot',
+	'ValveBiped.Bip01_L_Toe0',
+
+	'ValveBiped.Bip01_R_Thigh',
+	'ValveBiped.Bip01_R_Calf',
+	'ValveBiped.Bip01_R_Foot',
+	'ValveBiped.Bip01_R_Toe0'
+}
+
 ManipLegs.BonesToRemove = {
 	['ValveBiped.Bip01_Head1'] = true,
 	['ValveBiped.Bip01_L_Hand'] = true,
 	['ValveBiped.Bip01_L_Forearm'] = true,
 	['ValveBiped.Bip01_L_Upperarm'] = {
-		Vector(0, 0, -20)
+		Vector(0, 0, 0),
+		Angle(50, 50, 0)
 	},
 	['ValveBiped.Bip01_L_Clavicle'] = true,
 	['ValveBiped.Bip01_R_Hand'] = true,
 	['ValveBiped.Bip01_R_Forearm'] = true,
 	['ValveBiped.Bip01_R_Upperarm'] = {
-		Vector(0, 0, 20)
+		Vector(0, 0, 0),
+		Angle(-50, 50, 0)
 	},
 	['ValveBiped.Bip01_R_Clavicle'] = true,
 	['ValveBiped.Bip01_Spine4'] = true,
@@ -103,7 +97,8 @@ ManipLegs.BonesToRemove = {
 
 ManipLegs.FRAME_LOOP = {
 	{
-		eventName = 'PostDrawOpaqueRenderables',
+		// eventName = 'PostDrawOpaqueRenderables',
+		eventName = 'Think',
 		identity = 'LegsManipView',
 		timeout = 20,
 		iterator = function(dt, cur, self)
@@ -133,17 +128,18 @@ ManipLegs.FRAME_LOOP = {
 		eventName = 'ShouldDisableLegs',
 		identity = 'DisableGmodLegs3',
 		timeout = 20,
-		iterator = function(self, ...)
+		call = function(self, ...)
 			return true
 		end
 	}
 }
 
 ManipLegs.t = 0
-ManipLegs.FadeInSpeed = 5
-ManipLegs.FadeOutSpeed = 5
+ManipLegs.FadeInSpeed = 1
+ManipLegs.FadeOutSpeed = 1
 ManipLegs.Proxy = nil
-ManipLegs.Snapshot = UPSnapshot:New(nil, nil, nil, true, true)
+ManipLegs.Snapshot = nil
+
 
 function ManipLegs:FrameContextStartCheck()
 	return not IsValid(LocalPlayer()) or not LocalPlayer():Alive() or not IsValid(self.LegEnt)
@@ -156,6 +152,13 @@ end
 function ManipLegs:UpdateAnimation(dt)
 	local debug = GetConVar('developer') and GetConVar('developer'):GetBool()
 
+	local ang = LocalPlayer():GetAngles()
+	ang.p = 0
+	ang.r = 0
+
+	self.LegEnt:SetPos(LocalPlayer():GetPos())
+	self.LegEnt:SetAngles(ang)
+
 	self.LegEnt:SetupBones()
 	LocalPlayer():SetupBones()
 
@@ -165,22 +168,25 @@ function ManipLegs:UpdateAnimation(dt)
 	else
 		self.FinalEnt = nil
 		self.t = math.Clamp(self.t - math.abs(self.FadeOutSpeed) * dt, 0, 1)
+
+		if not self.Snapshot then
+			self.Snapshot = self.LegEnt:UPMaSnapshot(self.BoneList, self.Proxy, true, true)
+		end
 	end
 
 	local resultBatch, runtimeflags = self.LegEnt:UPMaFreeLerpBatch(
-		BoneList,
+		self.BoneList,
 		self.t,
 		LocalPlayer(),
 		self.FinalEnt or self.Snapshot or self.LegEnt,
 		self.Proxy
 	)
-	self.Snapshot.MatTbl = resultBatch
-	// if debug then self.LegEnt:UPMaPrintLog(runtimeflags) end
-	// PrintTable(resultBatch)
+
+	if debug then self.LegEnt:UPMaPrintLog(runtimeflags) end
 
 	runtimeflags = self.LegEnt:UPManipBoneBatch(
 		resultBatch,
-		BoneList,
+		self.BoneList,
 		UPManip.MANIP_FLAG.MANIP_POSITION,
 		self.Proxy
 	)
@@ -191,7 +197,18 @@ end
 
 function ManipLegs:PushFrameLoop()
 	for _, v in ipairs(self.FRAME_LOOP) do
-		UPar.PushFrameLoop(v.identity, v.iterator, self, v.timeout, v.clear, v.eventName)
+		if v.iterator then
+			UPar.PushFrameLoop(v.identity, v.iterator, self, v.timeout, v.clear, v.eventName)
+		end
+
+		if v.call then
+			hook.Add(v.eventName, v.identity, function(...)
+				return v.call(self, ...)
+			end)
+			timer.Create(string.format('%s_%s_timeout', v.eventName, v.identity), v.timeout, 1, function() 
+				hook.Remove(v.eventName, v.identity)
+			end)
+		end
 	end
 	
 	return true
@@ -199,7 +216,14 @@ end
 
 function ManipLegs:PopFrameLoop()
 	for _, v in ipairs(self.FRAME_LOOP) do
-		UPar.PopFrameLoop(v.identity)
+		if v.iterator then
+			UPar.PopFrameLoop(v.identity)
+		end
+
+		if v.call then
+			timer.Remove(string.format('%s_%s_timeout', v.eventName, v.identity))
+			hook.Remove(v.eventName, v.identity)
+		end
 	end
 
 	return true
@@ -299,8 +323,6 @@ function ManipLegs:Sleep()
 	return true
 end
 
-
-
 -- ==============================================================
 -- VMLegs监听器
 -- ==============================================================
@@ -325,14 +347,31 @@ ManipLegs.VMLegs_LISTENER = {
 			self.FadeInSpeed = animData.lerp_speed_in or 10
 			self.FadeOutSpeed = animData.lerp_speed_out or 5
 			self.FadeInCycle = (animData.startcycle or 0)
-			self.FadeOutCycle = (animData.endcycle or 1)
+			self.FadeOutCycle = (animData.endcycle or 0.8)
 			self.FinalEnt = VMLegs.LegParent
 			self.Proxy = GmodLegs3ToVMLegsProxyDemo
 			self.t = 0
+			self.Snapshot = nil
+
+
+			VMLegs.LegParent:SetCycle(self.FadeInCycle)
 			
-			self:Wake()
-			
-			// self.LegEnt:SetParent(LocalPlayer())
+			self:Wake()	
+
+			self.LegEnt:SetParent(VMLegs.LegParent)
+		end
+	},
+	{
+		eventName = 'UPExtLegsManipFrameContextEnd',
+		identity = 'LegsManipCycle',
+		call = function(self)
+			if not IsValid(VMLegs.LegModel) or not IsValid(VMLegs.LegParent) then
+				return
+			end
+
+			if VMLegs.LegParent:GetCycle() >= self.FadeOutCycle then
+				VMLegs.Remove()
+			end
 		end
 	}
 }
@@ -354,6 +393,8 @@ function ManipLegs:UnRegisterVMLegsListener()
 
 	return self:Sleep()
 end
+
+// ManipLegs:Init()
 
 
 local upext_legsmanip_vmlegs = CreateClientConVar('upext_legsmanip_vmlegs', '1', true, false, '')
@@ -385,3 +426,11 @@ UPar.SeqHookAdd('UParExtendMenu', 'LegsManip', function(panel)
 	local help = panel:ControlHelp('#upext.legsmanip.help')
 	help:SetTextColor(Color(255, 170, 0))
 end, 1)
+
+hook.Add('UParkourInitialized', 'VMLegsAnimSlideFix', function()
+	if not VMLegs then return end
+	local slide = VMLegs:GetAnim('slide')
+	if not slide then return end
+	slide.endcycle = 0.5
+	print('VMLegs anim "slide" fixed by UPExtLegsManip')
+end)

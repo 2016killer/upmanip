@@ -561,7 +561,7 @@ function ENTITY:UPMaFreeLerpBatch(boneList, t, ent1, ent2, proxy)
 	return resultBatch, flags
 end
 
-function ENTITY:UPMaPrintLog(runtimeflag, boneName, depth)
+function ENTITY:UPMaPrintLog(runtimeflag, boneName, throwError, depth)
 	-- runtimeflag 含部分堆栈信息, 实体本身作为堆信息, 组合起来就可以简单的追踪堆栈
 	-- 不要使用嵌套表, 这里只做了简单防御
 
@@ -570,16 +570,22 @@ function ENTITY:UPMaPrintLog(runtimeflag, boneName, depth)
 
 	if istable(runtimeflag) then
 		for boneName, flag in pairs(runtimeflag) do
-			self:UPMaPrintLog(flag, boneName, depth + 1)
+			self:UPMaPrintLog(flag, boneName, throwError, depth + 1)
 		end
 	elseif isnumber(runtimeflag) then
 		local totalmsg = {}
+		local err = false
 		for flag, msg in pairs(UPManip.__internal_FLAG_MSG) do
 			if msg ~= '' and bit.band(runtimeflag, flag) == flag then 
 				table.insert(totalmsg, msg) 
+				if flag ~= SUCC_FLAG then err = true end
 			end
 		end
 		if #totalmsg == 0 then return end
+		if err and throwError then
+			error(string.format('ent: %s, boneName: %s, code: %d, msg: %s', self, boneName, runtimeflag, table.concat(totalmsg, ', ')))
+		end
+
 		print('============UPManip Log===========')
 		print('entity:', self)
 		print('boneName:', boneName)
@@ -774,9 +780,13 @@ end
 // 	return t, initMat, finalMat
 // end
 
-// function UPManip.ExpandSelfProxy:GetLerpSpace(ent, boneName, t, ent1, ent2)
-// 	return UPManip.LERP_SPACE.LERP_LOCAL
-// end
+function UPManip.ExpandSelfProxy:GetLerpSpace(ent, boneName, t, ent1, ent2)
+	if boneName == 'SELF' then 
+		return UPManip.LERP_SPACE.LERP_WORLD
+	else	
+		return UPManip.LERP_SPACE.LERP_LOCAL
+	end
+end
 
 -- ================================== 示例 ===========================
 local XYNormal = UPar and UPar.XYNormal or function(v)
