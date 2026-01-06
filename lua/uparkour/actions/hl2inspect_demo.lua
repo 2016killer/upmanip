@@ -44,7 +44,8 @@ UPar.SeqHookAdd('UParKeyPress', 'hl2inspect_demo', function(eventflags)
 		UPar.CallPlyUsingEff('hl2inspect_demo', 'Start', LocalPlayer())
 	end
 end)
--- ========================= 骨骼代理 ===================
+-- =====================================================  
+-- 骨骼代理
 -- =====================================================
 UPManip.ArmProxyDemo = UPManip.ArmProxyDemo or {}
 local ArmProxyDemo = UPManip.ArmProxyDemo
@@ -97,7 +98,7 @@ local BoneList = {
 }
 
 -- 这里指定了 WEAPON 对应的骨骼名
-ArmProxyDemo.WeaponBoneMapping = {
+ArmProxyDemo.BoneWeaponMapping = {
 	['models/weapons/c_357.mdl'] = 'Python',
 	['models/upmanip_demo/yurie_customs/c_hm500.mdl'] = 'j_gun',
 	['models/weapons/c_crossbow.mdl'] = 'ValveBiped.Base',
@@ -123,7 +124,7 @@ ArmProxyDemo.WeaponBoneMapping = {
 
 -- 这里指定了不同模型间需要的偏移矩阵
 -- 这里只是为了少写一点, 后续需要初始化成矩阵
-ArmProxyDemo.WeaponBoneOffset = {
+ArmProxyDemo.BoneWeaponOffset = {
 	['models/weapons/c_357.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = {
 		Vector(3.218955, -0.071265, 2.476537),
 		Angle(2.566, 95.680, 82.198)
@@ -162,8 +163,8 @@ ArmProxyDemo.WeaponBoneOffset = {
 	},
 }
 
-function ArmProxyDemo:InitWeaponBoneOffset()
-	for k, v in pairs(self.WeaponBoneOffset) do
+function ArmProxyDemo:InitBoneWeaponOffset()
+	for k, v in pairs(self.BoneWeaponOffset) do
 		if ismatrix(v) then continue end
 		assert(istable(v), 'expect table, got', type(v))
 
@@ -172,19 +173,19 @@ function ArmProxyDemo:InitWeaponBoneOffset()
 		mat:SetTranslation(pos)
 		mat:SetAngles(ang)
 
-		self.WeaponBoneOffset[k] = mat
+		self.BoneWeaponOffset[k] = mat
 	end
 end
 
 -- 这里实现 WEAPON 的变化矩阵获取
 function ArmProxyDemo:GetMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
-	boneName = boneName == 'WEAPON' and self.WeaponBoneMapping[ent:GetModel()] or boneName
+	boneName = boneName == 'WEAPON' and self.BoneWeaponMapping[ent:GetModel()] or boneName
 	return ent:UPMaGetBoneMatrix(boneName)
 end
 
 -- 这里实现 WEAPON 的位置操作 
 function ArmProxyDemo:SetPosition(ent, boneName, posw, angw)
-	boneName = boneName == 'WEAPON' and self.WeaponBoneMapping[ent:GetModel()] or boneName
+	boneName = boneName == 'WEAPON' and self.BoneWeaponMapping[ent:GetModel()] or boneName
 	ent:UPMaSetBonePosition(boneName, posw, angw)
 end
 
@@ -193,7 +194,7 @@ function ArmProxyDemo:AdjustLerpRange(ent, boneName, t, initMatrix, finalMatrix,
 	if boneName ~= 'WEAPON' then return t, initMatrix, finalMatrix end
 
 	local key = string.format('%s-->%s', ent1:GetModel(), ent2:GetModel())
-	local offset = self.WeaponBoneOffset[key]
+	local offset = self.BoneWeaponOffset[key]
 	if not offset then return t, initMatrix, finalMatrix end
 
 	return t, initMatrix, finalMatrix * offset
@@ -210,8 +211,9 @@ function ArmProxyDemo:GetLerpSpace(ent, boneName, t, ent1, ent2)
 	end
 end
 
-ArmProxyDemo:InitWeaponBoneOffset()
--- ========================= 特效 ===================
+ArmProxyDemo:InitBoneWeaponOffset()
+-- =====================================================
+-- 特效
 -- =====================================================
 
 local animEnt = nil
@@ -362,7 +364,7 @@ function effect:FrameLoop(dt, cur, additive)
 		t = math.Clamp(t + dt * 5, 0, 1)
 	else
 		t = math.Clamp(t - dt * 5, 0, 1)
-		if t <= 0 then return true end
+		if t <= 0.01 then return true end
 	end
 
 

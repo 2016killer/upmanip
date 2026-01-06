@@ -7,7 +7,7 @@
 --]]
 
 -- ==============================================================
--- 骨骼代理, 使用静态偏移
+-- 骨骼代理定义, 位置需要偏移
 -- ==============================================================
 local zerovec = Vector(0, 0, 0)
 local zeroang = Angle(0, 0, 0)
@@ -15,8 +15,12 @@ local diagonalvec = Vector(1, 1, 1)
 local unitMat = Matrix()
 local emptyTable = {}
 
-g_ProxyLikeGmodLegs3 = {}
-g_ProxyLikeGmodLegs3.UsedBones = {
+
+UPManip.GmodLegs3ToVMLegsProxyDemo = {}
+
+local GmodLegs3ToVMLegsProxyDemo = UPManip.GmodLegs3ToVMLegsProxyDemo
+local BoneList = {
+	'SELF',
 	'ValveBiped.Bip01_Pelvis',
 	'ValveBiped.Bip01_Spine',
 	'ValveBiped.Bip01_Spine1',
@@ -33,34 +37,51 @@ g_ProxyLikeGmodLegs3.UsedBones = {
 	'ValveBiped.Bip01_R_Toe0'
 }
 
-function g_ProxyLikeGmodLegs3:GetMatrix(ent, boneName, mode)
-	return UPManip.Extend.GetMatrix(ent, boneName, mode)
+GmodLegs3ToVMLegsProxyDemo.BoneSelfOffset = -22
+
+function GmodLegs3ToVMLegsProxyDemo:GetMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
+	if boneName == 'SELF' and ent == LocalPlayer() then
+		local mat = ent:GetWorldTransformMatrix()
+		if not mat then return nil end
+		local eyeVec = LocalPlayer():GetAimVector()
+		eyeVec.z = 0
+		eyeVec:Normalize()
+		mat:SetTranslation(mat:GetTranslation() + eyeVec * self.BoneSelfOffset)
+
+		return mat
+	else
+		return ent:UPMaGetBoneMatrix(boneName)
+	end
 end
 
-function g_ProxyLikeGmodLegs3:GetParentMatrix(ent, boneName, mode)
-	-- 父级设为单位矩阵, 这让
-	if boneName == 'SELF' then
-		return unitMat
-	else
-		return UPManip.Extend.GetParentMatrix(ent, boneName, mode)
+function GmodLegs3ToVMLegsProxyDemo:GetParentMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
+	return UPManip.ExpandSelfProxy:GetParentMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
+end
+
+function UPManip.ExpandSelfProxy:SetPosition(ent, boneName, posw, angw)
+	return UPManip.ExpandSelfProxy:SetPosition(ent, boneName, posw, angw)
+end
+
+function GmodLegs3ToVMLegsProxyDemo:GetLerpSpace(ent, boneName, t, ent1, ent2)
+	if boneName == 'SELF' then 
+		return UPManip.LERP_SPACE.LERP_WORLD
+	else	
+		return UPManip.LERP_SPACE.LERP_LOCAL
 	end
 end
 -- ==============================================================
--- 骨骼代理, 使用静态偏移
+-- 腿部动画插值, 从GmodLegs3到VMLegs
 -- ==============================================================
 
 if g_ManipLegs and isentity(g_ManipLegs.LegEnt) and IsValid(g_ManipLegs.LegEnt) then
 	g_ManipLegs.LegEnt:Remove()
 	local succ, msg = pcall(g_ManipLegs.UnRegisterVMLegsListener, g_ManipLegs)
-	if not succ then print('[UPExt]: LegsManip: UnRegister failed: ' .. msg) end
+	if not succ then error(msg) end
 end
 g_ManipLegs = {}
 
 
-
 local ManipLegs = g_ManipLegs
-
-ManipLegs.ForwardOffset = -22
 
 ManipLegs.BonesToRemove = {
 	['ValveBiped.Bip01_Head1'] = true,
@@ -79,35 +100,25 @@ ManipLegs.BonesToRemove = {
 	['ValveBiped.Bip01_Spine4'] = true,
 }
 
-
--- ==============================================================
--- 帧循环钩子：添加
--- 自定义钩子名：UPExtLegsManipFrameContextStart（上下文起始）、UPExtLegsManipFrameContextEnd（上下文结束）
--- ==============================================================
-ManipLegs.FRAME_LOOP_HOOK = {
+ManipLegs.FRAME_LOOP = {
 	{
-		EVENT_NAME = 'PostDrawOpaqueRenderables',
-		IDENTITY = 'LegsManipView',
-		CALL = function(self, ...)
+		eventName = 'PostDrawOpaqueRenderables',
+		identity = 'LegsManipView',
+		timeout = 20,
+		iterator = function(dt, cur, self)
 			if not IsValid(LocalPlayer()) then
 				return
 			end
 
-			-- 1. 上下文起始钩子检查：返回true则直接睡眠
-			local frameStartSleep = hook.Run('UPExtLegsManipFrameContextStart', self) or false
+			local frameStartSleep = hook.Run('UPExtLegsManipFrameContextStart', self) or self:FrameContextStartCheck()
 			if frameStartSleep then
 				self:Sleep()
 				return
 			end
 
-			-- 原有帧循环逻辑
-			self:UpdatePosition()
-			self:UpdateAnimation(FrameTime())
-			local endFlag = self:RunTimeCondition()
-			if endFlag then self:Sleep() end
-
-			-- 2. 上下文结束钩子检查：返回true则直接睡眠
-			local frameEndSleep = hook.Run('UPExtLegsManipFrameContextEnd', self) or false
+			self:UpdateAnimation(dt)
+	
+			local frameEndSleep = hook.Run('UPExtLegsManipFrameContextEnd', self) or self:FrameContextEndCheck()
 			if frameEndSleep then
 				self:Sleep()
 				return
@@ -116,104 +127,71 @@ ManipLegs.FRAME_LOOP_HOOK = {
 	},
 
 	{
-		EVENT_NAME = 'ShouldDisableLegs',
-		IDENTITY = 'LegsManipCompatGmodLegs3',
-		CALL = function(self, ...)
+		eventName = 'ShouldDisableLegs',
+		identity = 'DisableGmodLegs3',
+		iterator = function(self, ...)
 			return true
 		end
 	}
 }
 
-ManipLegs.LerpT = 0
+ManipLegs.t = 0
 ManipLegs.FadeInSpeed = 10
 ManipLegs.FadeOutSpeed = 5
-ManipLegs.Snapshot = nil       -- 初始快照（由起始实体生成）
-ManipLegs.Target = nil         -- 统一目标实体
-ManipLegs.LastTarget = nil     -- 上一帧目标实体（用于检测变化）
-ManipLegs.FadeInCycle = 0
-ManipLegs.FadeOutCycle = 1
+ManipLegs.Proxy = nil
+ManipLegs.Snapshot = UPSnapshot:New()
 
--- 统一辅助钩子标识（方便批量移除，提升可维护性）
-ManipLegs.VMLegs_EXTRA_HOOK_ID = 'LegsManipVMLegsExtra'
 
--- 启动函数：参数保留起始实体（仅用于生成快照），淡入/淡出速度
-function ManipLegs:StartLerp(startEnt, fadeInSpeed, fadeOutSpeed)
-	self.Snapshot = nil
-	if IsValid(startEnt) then
-		startEnt:SetupBones()
-		local snapshot, runtimeflags = startEnt:UPMaSnapshot(self.BoneIterator)
-		self.Snapshot = snapshot
-	end
+function ManipLegs:FrameContextStartCheck()
+	return not IsValid(LocalPlayer()) or not LocalPlayer:Alive() or not IsValid(self.LegEnt)
+end
 
-	self.FadeInSpeed = fadeInSpeed and tonumber(fadeInSpeed) or 10
-	self.FadeOutSpeed = fadeOutSpeed and tonumber(fadeOutSpeed) or 5
-	self.LerpT = 0
-	self:Wake()
-	hook.Run('UPExtLegsManipStartLerp', self, startEnt)
+function ManipLegs:FrameContextEndCheck()
+	return self:FrameContextStartCheck() or (not IsValid(self.FinalEnt) and self.t <= 0.01)
 end
 
 function ManipLegs:UpdateAnimation(dt)
-	self:RunTimeTargetEmptyCheck()
-
-	if not self:GetRunState() or not self.Snapshot then
-		return
-	end
-
 	self.LegEnt:SetupBones()
-	local targetValid = isentity(self.Target) and IsValid(self.Target)
+	LocalPlayer():SetupBones()
 
-	if targetValid then
-		self.LerpT = math.Clamp(self.LerpT + self.FadeInSpeed * dt, 0, 1)
-		self.Target:SetupBones()
-
-		local lerpSnapshot, runtimeflags = self.LegEnt:UPMaLerpBoneBatch(
-			self.LerpT,
-			self.Snapshot,
-			self.Target,
-			self.BoneIterator
-		)
-		local runtimeflag = self.LegEnt:UPManipBoneBatch(
-			lerpSnapshot,
-			self.BoneIterator,
-			UPManip.MANIP_FLAG.MANIP_POSITION
-		)
+	if IsValid(self.FinalEnt) then
+		self.FinalEnt:SetupBones()
+		self.t = math.Clamp(self.t + math.abs(self.FadeInSpeed) * dt, 0, 1)
 	else
-		self.LerpT = math.Clamp(self.LerpT + self.FadeOutSpeed * dt, 0, 1)
-		LocalPlayer():SetupBones()
-
-		local lerpSnapshot, runtimeflags = self.LegEnt:UPMaLerpBoneBatch(
-			self.LerpT,
-			self.Snapshot,
-			LocalPlayer(),
-			self.BoneIterator
-		)
-		local runtimeflag = self.LegEnt:UPManipBoneBatch(
-			lerpSnapshot,
-			self.BoneIterator,
-			UPManip.MANIP_FLAG.MANIP_POSITION
-		)
+		self.FinalEnt = nil
+		self.t = math.Clamp(self.t - math.abs(self.FadeOutSpeed) * dt, 0, 1)
 	end
+
+	local resultBatch, runtimeflags = self.LegEnt:UPMaFreeLerpBatch(
+		BoneList
+		self.t,
+		LocalPlayer(),
+		self.FinalEnt or self.Snapshot or self.LegEnt,
+		GmodLegs3ToVMLegsProxyDemo
+	)
+	self.Snapshot.MatTbl = resultBatch
+	// if debug then vm:UPMaPrintLog(runtimeflags) end
+
+	local runtimeflag = self.LegEnt:UPManipBoneBatch(
+		resultBatch,
+		BoneList,
+		UPManip.MANIP_FLAG.MANIP_POSITION,
+		GmodLegs3ToVMLegsProxyDemo
+	)
+	// if debug then vm:UPMaPrintLog(runtimeflags) end
 end
 
 function ManipLegs:PushFrameLoop()
-	for _, v in ipairs(self.FRAME_LOOP_HOOK) do
-		hook.Add(v.EVENT_NAME, v.IDENTITY, function(...)
-			local succ, result = pcall(v.CALL, self, ...)
-			if not succ then
-				hook.Remove(v.EVENT_NAME, v.IDENTITY)
-				ErrorNoHaltWithStack(result)
-			else
-				return result
-			end
-		end)
+	for _, v in ipairs(self.FRAME_LOOP) do
+		UPar.PushFrameLoop(v.identity, v.iterator, self, v.clear, v.timeout)
 	end
 	
 	return true
 end
 
 function ManipLegs:PopFrameLoop()
-	for _, v in ipairs(self.FRAME_LOOP_HOOK) do
-		hook.Remove(v.EVENT_NAME, v.IDENTITY)
+	for _, v in ipairs(self.FRAME_LOOP) do
+		UPar.PopFrameLoop(v.identity)
 	end
 
 	return true
@@ -315,122 +293,57 @@ function ManipLegs:Sleep()
 	return true
 end
 
--- 原有RunTimeCondition接口完全保留，不修改！
-function ManipLegs:RunTimeCondition()
-	local baseEndFlag = self:RunTimeSleep()
-	-- Target为LocalPlayer且插值完成则结束
-	local isTargetLocal = self.Target == LocalPlayer()
-	local lerpDone = self.LerpT >= 1
-	local targetLocalDone = isTargetLocal and lerpDone
-	-- VMLegs Cycle范围检查
-	local cycleValid = true
-	if IsValid(VMLegs) and VMLegs.Cycle ~= nil then
-		cycleValid = VMLegs.Cycle >= self.FadeInCycle and VMLegs.Cycle <= self.FadeOutCycle
-	end
-	return baseEndFlag or targetLocalDone or not cycleValid
-end
 
-function ManipLegs:RunTimeSleep()
-	local hasValidSnapshot = istable(self.Snapshot) and next(self.Snapshot) ~= nil
-	local endFlag = not hasValidSnapshot or not IsValid(self.LegEnt) or not IsValid(LocalPlayer())
-	endFlag = endFlag or hook.Run('UPExtLegsManipRunTimeSleep', self) or false
-	return endFlag
-end
 
 -- ==============================================================
--- VMLegs监听器：严格按 {IDENTITY/EVENT_NAME/CALL} 结构，无嵌套钩子注册
+-- VMLegs监听器
 -- ==============================================================
 ManipLegs.VMLegs_LISTENER = {
 	{
-		IDENTITY = 'LegsManipTrigger',
-		EVENT_NAME = 'UPExtLegsManipVMLegsTrigger', -- 自定义ManipLegs钩子名
-		CALL = function(self, anim, ...)
-			-- 纯业务逻辑，无钩子注册！清爽干净
+		eventName = 'VMLegsPostPlayAnim',
+		identity = 'LegsManipTrigger',
+		call = function(self, anim, ...)
 			if not IsValid(VMLegs.LegModel) or not IsValid(VMLegs.LegParent) then
 				print('[UPExt]: LegsManip: VMLegs has not been started yet!')
-				return false
+				return
 			end
 
 			local animData = VMLegs:GetAnim(anim)
 			if not istable(animData) then
-				print('[UPExt]: LegsManip: VMLegs has no anim data for anim ' .. anim)
-				return false
+				print('[UPExt]: LegsManip: VMLegs has no anim data for anim ', anim)
+				return
 			end
 
 			VMLegs.LegModel:SetNoDraw(true)
 
-			-- 初始化参数
 			self.FadeInSpeed = animData.lerp_speed_in or 10
 			self.FadeOutSpeed = animData.lerp_speed_out or 5
 			self.FadeInCycle = (animData.startcycle or 0)
 			self.FadeOutCycle = (animData.endcycle or 1)
-
-			-- 启动插值+设置Target
-			self:StartLerp(self.LegEnt, self.FadeInSpeed, self.FadeOutSpeed)
-			self:ChangeTarget(VMLegs.LegParent)
-
-			hook.Run('UPExtLegsManipPostPlayAnim', self, animData)
-			return true -- 返回需要的业务结果
+ 
 		end
 	}
 }
 
--- ==============================================================
--- 分割线：统一注册/注销（所有钩子在上层管理，无嵌套，可维护性拉满）
--- ==============================================================
 function ManipLegs:RegisterVMLegsListener()
-	-- 1. 先注册VMLegs_LISTENER核心钩子（原有逻辑，保留）
 	for _, v in ipairs(self.VMLegs_LISTENER) do
-		hook.Add(v.EVENT_NAME, v.IDENTITY, function(...)
-			return v.CALL(self, ...)
+		hook.Add(v.eventName, v.identity, function(...)
+			return v.call(self, ...)
 		end)
 	end
 
-	-- 2. 上层统一注册辅助钩子（Target变化、RunTimeSleep），无嵌套！
-	local extraHookId = self.VMLegs_EXTRA_HOOK_ID
-
-	-- Target变化钩子：失效时fallback到LocalPlayer
-	hook.Add('UPExtLegsManipTargetChanged', extraHookId, function(legsManip)
-		if not IsValid(VMLegs.LegParent) then
-			legsManip:ChangeTarget(LocalPlayer())
-		end
-	end)
-
-	-- RunTimeSleep钩子：VMLegs失效时触发睡眠
-	hook.Add('UPExtLegsManipRunTimeSleep', extraHookId, function(legsManip)
-		return not IsValid(VMLegs.LegModel) or not IsValid(VMLegs.LegParent)
-	end)
-
-	-- 帧循环上下文钩子（可选，如需VMLegs单独控制可添加）
-	hook.Add('UPExtLegsManipFrameContextStart', extraHookId, function(legsManip)
-		return not IsValid(VMLegs.LegModel) -- VMLegs模型失效则起始就睡眠
-	end)
-	hook.Add('UPExtLegsManipFrameContextEnd', extraHookId, function(legsManip)
-		return not IsValid(VMLegs.LegParent) -- VMLegs父级失效则结束时睡眠
-	end)
+	return true
 end
 
 function ManipLegs:UnRegisterVMLegsListener()
-	-- 1. 睡眠组件
-	self:Sleep()
-
-	-- 2. 注销VMLegs_LISTENER核心钩子
 	for _, v in ipairs(self.VMLegs_LISTENER) do
-		hook.Remove(v.EVENT_NAME, v.IDENTITY)
+		hook.Remove(v.eventName, v.identity)
 	end
 
-	-- 3. 批量注销所有辅助钩子（只需按统一标识移除，无需硬编码！）
-	local extraHookId = self.VMLegs_EXTRA_HOOK_ID
-	hook.Remove('UPExtLegsManipTargetChanged', extraHookId)
-	hook.Remove('UPExtLegsManipRunTimeSleep', extraHookId)
-	hook.Remove('UPExtLegsManipFrameContextStart', extraHookId)
-	hook.Remove('UPExtLegsManipFrameContextEnd', extraHookId)
-
-	-- 4. 注销帧循环钩子
-	self:PopFrameLoop()
+	return self:Sleep()
 end
 
--- 控制台变量：对应VMLegs监听器
+
 local upext_legsmanip_vmlegs = CreateClientConVar('upext_legsmanip_vmlegs', '1', true, false, '')
 -- ==============================================================
 -- 动态注册/注销
