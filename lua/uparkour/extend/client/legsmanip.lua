@@ -422,8 +422,8 @@ end)
 -- ==============================================================
 UPar.SeqHookAdd('UParExtendMenu', 'LegsManip', function(panel)
 	panel:Help('·························· 腿部控制器 ··························')
-	panel:CheckBox('#upext.legsmanip', 'upext_legsmanip_vmlegs')
-	local help = panel:ControlHelp('#upext.legsmanip.help')
+	panel:CheckBox('#upext.legsmanip_vmlegs', 'upext_legsmanip_vmlegs')
+	local help = panel:ControlHelp('#upext.legsmanip_vmlegs.help')
 	help:SetTextColor(Color(255, 170, 0))
 end, 1)
 

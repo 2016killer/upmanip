@@ -65,7 +65,7 @@ end
 
 concommand.Add('upmanip_hl2inspect_demo_start', temp_start)
 
-UPKeyboard.Register('hl2inspect_demo', '[]')
+UPKeyboard.Register('hl2inspect_demo', '[]', '#hl2inspect_demo')
 UPar.SeqHookAdd('UParKeyPress', 'hl2inspect_demo', function(eventflags)
 	if eventflags['hl2inspect_demo'] then
 		eventflags['hl2inspect_demo'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
