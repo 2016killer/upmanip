@@ -1,3 +1,24 @@
+--[[
+	作者:白狼
+	2025 1 6
+	注意: 这只是一个 demo, 只有参考价值, 没有拓展价值
+	这个 demo 使用的是固定的检视动作, 来自 YuRaNnNzZZ (TFA作者) 的 hm500 模型.
+	这个 demo 将会展示 UPManip 中骨骼代理的用法, 以及 UPManip 的缺点。
+
+	首先 UPManip 对骨骼的控制可以在渲染上下文之外, 不同于 ent:SetBonePosition, 
+	这是他的优点也是缺点, 但我还是感觉 ent:SetBonePosition 更好, 因为它不用算那么多逆矩阵,
+	也不需要等位姿同步完成那一帧开始，如果使用 ent:SetBonePosition 只要做一个特殊实体, 
+	然后重写 Draw 即可。 (操，为什么没早看到它的文档...)
+
+	但 UPManip 依旧具有价值, 那就是关于骨骼代理的概念, 只需要简单写两三个接口就能扩张骨骼集、
+	操作集，这里我们统一使用 "WEAPON" 来表示武器, 然后在代理上挂载静态映射, 通过模型路径来找到
+	武器对应的骨骼名和偏移矩阵。
+
+	如果想要拓展到任意动作，任意武器，那就需要很多映射，但这总比同个动作每个武器独立弄一个动作好。
+	关于检视的镜头晃动, 具体怎么做, 实际上 VManip Base 里面有实例, 直接抄他的就行。
+--]]
+
+
 local hl2inspect_demo = UPAction:Register('hl2inspect_demo', {
 	AAAACreat = '白狼',
 	AAADesc = '#hl2inspect_demo.desc',
@@ -27,6 +48,8 @@ end)
 -- =====================================================
 UPManip.ArmProxyDemo = UPManip.ArmProxyDemo or {}
 local ArmProxyDemo = UPManip.ArmProxyDemo
+
+-- 这里指定了要操作的骨骼列表, 'WEAPON' 这个骨骼实际上是一个抽象, 需要通过代理器映射到具体骨骼
 local BoneList = {
 	'WEAPON',
 	'ValveBiped.Bip01_L_UpperArm',
@@ -73,24 +96,70 @@ local BoneList = {
 
 }
 
+-- 这里指定了 WEAPON 对应的骨骼名
 ArmProxyDemo.WeaponBoneMapping = {
 	['models/weapons/c_357.mdl'] = 'Python',
 	['models/upmanip_demo/yurie_customs/c_hm500.mdl'] = 'j_gun',
 	['models/weapons/c_crossbow.mdl'] = 'ValveBiped.Base',
+	['models/weapons/c_irifle.mdl'] = 'Base',
+	['models/weapons/c_shotgun.mdl'] = 'ValveBiped.Gun',
+	['models/weapons/c_physcannon.mdl'] = 'Base',
+	['models/weapons/c_toolgun.mdl'] = 'Base',
+	['models/weapons/c_superphyscannon.mdl'] = 'Base',
+	['models/weapons/c_smg1.mdl'] = 'ValveBiped.base',
+	['models/weapons/c_rpg.mdl'] = 'base',
 }
 
 -- 你妈比的?
-local temp = Matrix()
-temp:Rotate(Angle(0, 0, 0))
-local temp2 = Matrix()
-temp2:SetTranslation(Vector(0, -20, -20))
-temp = temp * temp2
+// local temp = Matrix()
+// temp:Rotate(Angle(0, 0, 90))
+// temp:Rotate(Angle(90, 0, 0))
+// temp:Rotate(Angle(0, 0, 0))
+// local temp2 = Matrix()
+// temp2:SetTranslation(Vector(0.5, 8, -10))
+// temp = temp * temp2
+// print(temp:GetTranslation())
+// print(temp:GetAngles())
+
+-- 这里指定了不同模型间需要的偏移矩阵
+-- 这里只是为了少写一点, 后续需要初始化成矩阵
 ArmProxyDemo.WeaponBoneOffset = {
 	['models/weapons/c_357.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = {
 		Vector(3.218955, -0.071265, 2.476537),
 		Angle(2.566, 95.680, 82.198)
 	},
-	['models/weapons/c_crossbow.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = temp,
+	['models/weapons/c_crossbow.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = {
+		Vector(-17.999994, -1.000000, -14.999996),
+		Angle(0, 90, 90)
+	},
+	['models/weapons/c_irifle.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = {
+		Vector(-4.999999, -0.000000, 3.000000),
+		Angle(-0.000, 90.000, 90.000)
+	},
+	['models/weapons/c_shotgun.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = {
+		Vector(14.999995, 0.000001, 4.999999),
+		Angle(-0.000, 90.000, 90.000)
+	},
+	['models/weapons/c_physcannon.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = {
+		Vector(7.999997, 4.999999, 5.000000),
+		Angle(-0.000, 90.000, 90.000)
+	},
+	['models/weapons/c_toolgun.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = {
+		Vector(-21.999994, 3.499998, -4.999999),
+		Angle(-0.000, 90.000, 90.000)
+	},
+	['models/weapons/c_superphyscannon.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = {
+		Vector(7.999997, 4.999999, 5.000000),
+		Angle(-0.000, 90.000, 90.000)
+	},
+	['models/weapons/c_smg1.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = {
+		Vector(1.999999, -0.000000, 3.249999),
+		Angle(-0.000, 90.000, 90.000)
+	},
+	['models/weapons/c_rpg.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = {
+		Vector(-9.999997, 0.499998, 7.999998),
+		Angle(-0.000, 90.000, 90.000)
+	},
 }
 
 function ArmProxyDemo:InitWeaponBoneOffset()
@@ -107,16 +176,19 @@ function ArmProxyDemo:InitWeaponBoneOffset()
 	end
 end
 
+-- 这里实现 WEAPON 的变化矩阵获取
 function ArmProxyDemo:GetMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
 	boneName = boneName == 'WEAPON' and self.WeaponBoneMapping[ent:GetModel()] or boneName
 	return ent:UPMaGetBoneMatrix(boneName)
 end
 
+-- 这里实现 WEAPON 的位置操作 
 function ArmProxyDemo:SetPosition(ent, boneName, posw, angw)
 	boneName = boneName == 'WEAPON' and self.WeaponBoneMapping[ent:GetModel()] or boneName
 	ent:UPMaSetBonePosition(boneName, posw, angw)
 end
 
+-- 这里实现偏移应用
 function ArmProxyDemo:AdjustLerpRange(ent, boneName, t, initMatrix, finalMatrix, ent1, ent2, LERP_WORLD)
 	if boneName ~= 'WEAPON' then return t, initMatrix, finalMatrix end
 
@@ -127,6 +199,7 @@ function ArmProxyDemo:AdjustLerpRange(ent, boneName, t, initMatrix, finalMatrix,
 	return t, initMatrix, finalMatrix * offset
 end
 
+-- 在这里指定每个骨骼的插值空间
 function ArmProxyDemo:GetLerpSpace(ent, boneName, t, ent1, ent2)
 	if boneName == 'WEAPON' 
 	or boneName == 'ValveBiped.Bip01_R_UpperArm' 
@@ -146,11 +219,17 @@ local animModel = nil
 local finalEnt = nil
 local t = 0
 local timeout = 10
-local snapshot = nil
+local isFadeIn = true
+local startCycle = 0
+local endCycle = 0.8
+// local startCycle = 0.78
+// local endCycle = 2
+local firstTime = true
+
 
 function effect:Start()
 	if UPar.IsFrameLoopExist('hl2inspect_demo_eff') then 
-		UPar.PopFrameLoop('hl2inspect_demo_eff')
+		isFadeIn = false
 		return 
 	end
 
@@ -183,7 +262,7 @@ function effect:Start()
 	finalEnt:ResetSequenceInfo()
 	finalEnt:ResetSequence(seqId)
 	finalEnt:SetPlaybackRate(1)
-	finalEnt:SetCycle(0)
+	finalEnt:SetCycle(startCycle)
 	finalEnt:SetParent(vm)
 	finalEnt:SetNoDraw(true)
 
@@ -210,6 +289,8 @@ function effect:Start()
 	vm:SetColor(Color(255, 255, 255, 100))
 
 	t = 0
+	isFadeIn = true
+	firstTime = true
 	UPar.PushFrameLoop('hl2inspect_demo_eff', 
 		function(...)
 			return self:FrameLoop(...)
@@ -221,25 +302,32 @@ function effect:Start()
 		'PreDrawViewModel'
 	)
 	hook.Add('PreDrawViewModel', 'hl2inspect_demo_eff', function()
+		-- 这里不能写成 return not firstTime, 因为这是钩子
+		if firstTime then return end
 		return true
 	end)
 end
 
 
 
-local function DrawCoordinate(mat)
+local function DrawCoordinate(mat, pos)
 	if not mat then return end
-	local pos = mat:GetTranslation()
+	local pos = pos or mat:GetTranslation()
 	local ang = mat:GetAngles()
 
-	render.DrawLine(pos, pos + ang:Forward() * 20, Color(255, 0, 0), false)
-	render.DrawLine(pos, pos + ang:Right() * 20, Color(0, 255, 0), false)
-	render.DrawLine(pos, pos + ang:Up() * 20, Color(0, 0, 255), false)
+	render.DrawLine(pos, pos + ang:Forward() * 20, Color(255, 0, 0), true)
+	render.DrawLine(pos, pos - ang:Right() * 20, Color(0, 255, 0), true)
+	render.DrawLine(pos, pos + ang:Up() * 20, Color(0, 0, 255), true)
 end
 
 function effect:FrameLoop(dt, cur, additive)
 	local vm = LocalPlayer():GetViewModel()
 	local hand = LocalPlayer():GetHands()
+
+	if not LocalPlayer():Alive() then 
+		print('player not alive')
+		return true 
+	end
 
 	if not IsValid(hand) or not hand:GetModel() then
 		print('no hand or hand model')
@@ -268,12 +356,15 @@ function effect:FrameLoop(dt, cur, additive)
 
 	local newCycle = finalEnt:GetCycle() + dt * 0.25
 	finalEnt:SetCycle(newCycle)
-	if newCycle > 0.8 then
+	isFadeIn = isFadeIn and newCycle <= endCycle
+
+	if isFadeIn then
+		t = math.Clamp(t + dt * 5, 0, 1)
+	else
 		t = math.Clamp(t - dt * 5, 0, 1)
 		if t <= 0 then return true end
-	else
-		t = math.Clamp(t + dt * 5, 0, 1)
 	end
+
 
 	local debug = GetConVar('developer') and GetConVar('developer'):GetBool()
 
@@ -293,7 +384,17 @@ function effect:FrameLoop(dt, cur, additive)
 		ArmProxyDemo
 	)
 	// if debug then vm:UPMaPrintLog(runtimeflags) end
-	if debug then DrawCoordinate(ArmProxyDemo:GetMatrix(finalEnt, 'WEAPON')) end
+	if debug then 
+		DrawCoordinate(
+			resultBatch['WEAPON'], 
+			resultBatch['ValveBiped.Bip01_R_Hand'] and resultBatch['ValveBiped.Bip01_R_Hand']:GetTranslation()
+		) 
+	end
+
+	if firstTime then
+		firstTime = false
+		return
+	end
 
 	animModel:DrawModel()
 	animEnt:DrawModel()
@@ -341,7 +442,7 @@ concommand.Add('upmanip_vm_bone', function(ply, cmd, args)
 		local parentId = vm:GetBoneParent(boneId)
 		local parentMat = parentId == -1 and vm:GetWorldTransformMatrix() or vm:GetBoneMatrix(parentId)
 
-		if boneMat then debugoverlay.Sphere(boneMat:GetTranslation() + offset, 1, lifeTime) end
+		if boneMat then debugoverlay.Box(boneMat:GetTranslation() + offset, Vector(-0.2, -0.2, -0.2), Vector(0.2, 0.2, 0.2), lifeTime) end
 		if boneMat and parentMat then
 			debugoverlay.Line(
 				boneMat:GetTranslation() + offset,
