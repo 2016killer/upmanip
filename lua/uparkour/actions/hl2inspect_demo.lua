@@ -17,25 +17,39 @@ if SERVER then
 end
 
 UPKeyboard.Register('hl2inspect_demo', '[]')
-
 UPar.SeqHookAdd('UParKeyPress', 'hl2inspect_demo', function(eventflags)
 	if eventflags['hl2inspect_demo'] then
 		eventflags['hl2inspect_demo'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
 		UPar.CallPlyUsingEff('hl2inspect_demo', 'Start', LocalPlayer())
 	end
 end)
-
-local animEnt = nil
-local animModel = nil
-local finalEnt = nil
-local t = 0
-local timeout = 10
-
-
-UPManip.VMRightArmProxy = UPManip.VMRightArmProxy or {}
-local VMRightArmProxy = UPManip.VMRightArmProxy
+-- ========================= 骨骼代理 ===================
+-- =====================================================
+UPManip.ArmProxyDemo = UPManip.ArmProxyDemo or {}
+local ArmProxyDemo = UPManip.ArmProxyDemo
 local BoneList = {
 	'WEAPON',
+	'ValveBiped.Bip01_L_UpperArm',
+	'ValveBiped.Bip01_L_Forearm',
+	'ValveBiped.Bip01_L_Hand',
+	'ValveBiped.Bip01_L_Wrist',
+	'ValveBiped.Bip01_L_Ulna',
+	'ValveBiped.Bip01_L_Finger4',
+	'ValveBiped.Bip01_L_Finger41',
+	'ValveBiped.Bip01_L_Finger42',
+	'ValveBiped.Bip01_L_Finger3',
+	'ValveBiped.Bip01_L_Finger31',
+	'ValveBiped.Bip01_L_Finger32',
+	'ValveBiped.Bip01_L_Finger2',
+	'ValveBiped.Bip01_L_Finger21',
+	'ValveBiped.Bip01_L_Finger22',
+	'ValveBiped.Bip01_L_Finger1',
+	'ValveBiped.Bip01_L_Finger11',
+	'ValveBiped.Bip01_L_Finger12',
+	'ValveBiped.Bip01_L_Finger0',
+	'ValveBiped.Bip01_L_Finger01',
+	'ValveBiped.Bip01_L_Finger02',
+
 	'ValveBiped.Bip01_R_UpperArm',
 	'ValveBiped.Bip01_R_Forearm',
 	'ValveBiped.Bip01_R_Hand',
@@ -56,34 +70,30 @@ local BoneList = {
 	'ValveBiped.Bip01_R_Finger0',
 	'ValveBiped.Bip01_R_Finger01',
 	'ValveBiped.Bip01_R_Finger02'
+
 }
 
-VMRightArmProxy.WeaponBoneMapping = {
+ArmProxyDemo.WeaponBoneMapping = {
 	['models/weapons/c_357.mdl'] = 'Python',
-	['models/upmanip_demo/yurie_customs/c_hm500.mdl'] = 'j_gun'
+	['models/upmanip_demo/yurie_customs/c_hm500.mdl'] = 'j_gun',
+	['models/weapons/c_crossbow.mdl'] = 'ValveBiped.Base',
 }
 
 -- 你妈比的?
-// local temp = Matrix()
-// temp:Rotate(Angle(90, 0, 0))
-// temp:Rotate(Angle(0, 50, 0))
-// temp:Rotate(Angle(0, 0, 20))
-// temp:Rotate(Angle(0, 20, 0))
-
-// temp:Rotate(Angle(0, 0, -25))
-// temp:Rotate(Angle(0, 20, 0))
-// temp:Rotate(Angle(10, 0, 0))
-// local temp2 = Matrix()
-// temp2:SetTranslation(Vector(-0.5, 2, 3.5))
-// temp = temp * temp2
-VMRightArmProxy.WeaponBoneOffset = {
+local temp = Matrix()
+temp:Rotate(Angle(0, 0, 0))
+local temp2 = Matrix()
+temp2:SetTranslation(Vector(0, -20, -20))
+temp = temp * temp2
+ArmProxyDemo.WeaponBoneOffset = {
 	['models/weapons/c_357.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = {
 		Vector(3.218955, -0.071265, 2.476537),
 		Angle(2.566, 95.680, 82.198)
-	}
+	},
+	['models/weapons/c_crossbow.mdl-->models/upmanip_demo/yurie_customs/c_hm500.mdl'] = temp,
 }
 
-function VMRightArmProxy:InitWeaponBoneOffset()
+function ArmProxyDemo:InitWeaponBoneOffset()
 	for k, v in pairs(self.WeaponBoneOffset) do
 		if ismatrix(v) then continue end
 		assert(istable(v), 'expect table, got', type(v))
@@ -97,17 +107,17 @@ function VMRightArmProxy:InitWeaponBoneOffset()
 	end
 end
 
-function VMRightArmProxy:GetMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
+function ArmProxyDemo:GetMatrix(ent, boneName, PROXY_FLAG_GET_MATRIX)
 	boneName = boneName == 'WEAPON' and self.WeaponBoneMapping[ent:GetModel()] or boneName
 	return ent:UPMaGetBoneMatrix(boneName)
 end
 
-function VMRightArmProxy:SetPosition(ent, boneName, posw, angw)
+function ArmProxyDemo:SetPosition(ent, boneName, posw, angw)
 	boneName = boneName == 'WEAPON' and self.WeaponBoneMapping[ent:GetModel()] or boneName
 	ent:UPMaSetBonePosition(boneName, posw, angw)
 end
 
-function VMRightArmProxy:AdjustLerpRange(ent, boneName, t, initMatrix, finalMatrix, ent1, ent2, LERP_WORLD)
+function ArmProxyDemo:AdjustLerpRange(ent, boneName, t, initMatrix, finalMatrix, ent1, ent2, LERP_WORLD)
 	if boneName ~= 'WEAPON' then return t, initMatrix, finalMatrix end
 
 	local key = string.format('%s-->%s', ent1:GetModel(), ent2:GetModel())
@@ -117,13 +127,34 @@ function VMRightArmProxy:AdjustLerpRange(ent, boneName, t, initMatrix, finalMatr
 	return t, initMatrix, finalMatrix * offset
 end
 
-function VMRightArmProxy:GetLerpSpace(ent, boneName, t, ent1, ent2)
-	return UPManip.LERP_SPACE.LERP_WORLD 
+function ArmProxyDemo:GetLerpSpace(ent, boneName, t, ent1, ent2)
+	if boneName == 'WEAPON' 
+	or boneName == 'ValveBiped.Bip01_R_UpperArm' 
+	or boneName == 'ValveBiped.Bip01_L_UpperArm' then 
+		return UPManip.LERP_SPACE.LERP_WORLD
+	else	
+		return UPManip.LERP_SPACE.LERP_LOCAL
+	end
 end
 
-VMRightArmProxy:InitWeaponBoneOffset()
+ArmProxyDemo:InitWeaponBoneOffset()
+-- ========================= 特效 ===================
+-- =====================================================
+
+local animEnt = nil
+local animModel = nil
+local finalEnt = nil
+local t = 0
+local timeout = 10
+local snapshot = nil
 
 function effect:Start()
+	if UPar.IsFrameLoopExist('hl2inspect_demo_eff') then 
+		UPar.PopFrameLoop('hl2inspect_demo_eff')
+		return 
+	end
+
+
 	local hand = LocalPlayer():GetHands()
 	if not IsValid(hand) or not hand:GetModel() then
 		print('no hand or hand model')
@@ -176,8 +207,7 @@ function effect:Start()
 	animModel:SetMaterial(hand:GetMaterial())
 	animModel:SetColor(hand:GetColor())
 
-	vm:SetMaterial('Models/effects/vol_light001')
-	hand:SetMaterial('Models/effects/vol_light001')
+	vm:SetColor(Color(255, 255, 255, 100))
 
 	t = 0
 	UPar.PushFrameLoop('hl2inspect_demo_eff', 
@@ -188,8 +218,11 @@ function effect:Start()
 		function(...)
 			return self:FrameLoopClear(...)
 		end,
-		'PostDrawViewModel'
+		'PreDrawViewModel'
 	)
+	hook.Add('PreDrawViewModel', 'hl2inspect_demo_eff', function()
+		return true
+	end)
 end
 
 
@@ -206,9 +239,20 @@ end
 
 function effect:FrameLoop(dt, cur, additive)
 	local vm = LocalPlayer():GetViewModel()
+	local hand = LocalPlayer():GetHands()
 
-	if not IsValid(finalEnt) or not IsValid(animEnt) or not IsValid(animModel) or not IsValid(vm) then
-		print('no vm or finalEnt or animEnt or animModel')
+	if not IsValid(hand) or not hand:GetModel() then
+		print('no hand or hand model')
+		return true
+	end
+
+	if not IsValid(vm) or not vm:GetModel() then
+		print('no vm or vm model')
+		return true
+	end
+
+	if not IsValid(finalEnt) or not IsValid(animEnt) or not IsValid(animModel) then
+		print('no finalEnt or animEnt or animModel')
 		return true
 	end
 
@@ -226,30 +270,33 @@ function effect:FrameLoop(dt, cur, additive)
 	finalEnt:SetCycle(newCycle)
 	if newCycle > 0.8 then
 		t = math.Clamp(t - dt * 5, 0, 1)
+		if t <= 0 then return true end
 	else
 		t = math.Clamp(t + dt * 5, 0, 1)
 	end
+
+	local debug = GetConVar('developer') and GetConVar('developer'):GetBool()
 
 	local resultBatch, runtimeflags = animEnt:UPMaFreeLerpBatch(
 		BoneList, 
 		t, 
 		vm, 
 		finalEnt, 
-		VMRightArmProxy
+		ArmProxyDemo
 	)
-	// vm:UPMaPrintLog(runtimeflags)
+	// if debug then vm:UPMaPrintLog(runtimeflags) end
 
 	runtimeflags = animEnt:UPManipBoneBatch(
 		resultBatch, 
 		BoneList, 
 		UPManip.MANIP_FLAG.MANIP_POSITION,
-		VMRightArmProxy
+		ArmProxyDemo
 	)
-	// vm:UPMaPrintLog(runtimeflags)
+	// if debug then vm:UPMaPrintLog(runtimeflags) end
+	if debug then DrawCoordinate(ArmProxyDemo:GetMatrix(finalEnt, 'WEAPON')) end
 
 	animModel:DrawModel()
 	animEnt:DrawModel()
-	DrawCoordinate(VMRightArmProxy:GetMatrix(animEnt, 'WEAPON'))
 end
 
 function effect:FrameLoopClear(_, _, _,reason)
@@ -259,12 +306,14 @@ function effect:FrameLoopClear(_, _, _,reason)
 	if IsValid(animEnt) then animEnt:Remove() end
 
 	local hand = LocalPlayer():GetHands()
-	if IsValid(hand) then hand:SetMaterial('') end
+	if IsValid(hand) then hand:SetNoDraw(false) end
 
 	local vm = LocalPlayer():GetViewModel()
-	if IsValid(vm) then vm:SetMaterial('') end
+	if IsValid(vm) then vm:SetNoDraw(false) end
 
 	print('clear hl2inspect_demo_eff', reason)
+
+	hook.Remove('PreDrawViewModel', 'hl2inspect_demo_eff')
 end
 
 function effect:Clear()
